@@ -1,0 +1,437 @@
+{
+  "context": {
+    "run_date": "07-04-2026",
+    "project_root": "E:\\Codigos\\PROJETOS\\projeto_imoveis",
+    "raw_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026",
+    "processed_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed",
+    "processed_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026",
+    "artifacts_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026",
+    "logs_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\07-04-2026"
+  },
+  "status": "success",
+  "blocked_stage": null,
+  "results": [
+    {
+      "stage_name": "collect_general_listings",
+      "status": "success",
+      "objective": "Executar scrapers das paginas gerais e gerar a coleta bruta diaria.",
+      "started_at": "2026-04-07T13:41:59.005522+00:00",
+      "finished_at": "2026-04-07T14:48:04.964584+00:00",
+      "input_manifest": null,
+      "output_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026\\collect_general_listings\\manifest.json",
+      "log_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\07-04-2026\\collect_general_listings.log",
+      "artifacts": [
+        {
+          "name": "olx_venda",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_venda.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 409,
+          "metadata": {
+            "source": "olx",
+            "domain_group": "olx"
+          }
+        },
+        {
+          "name": "quinto_venda",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_venda.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 492,
+          "metadata": {
+            "source": "quinto",
+            "domain_group": "quinto"
+          }
+        },
+        {
+          "name": "lopes_venda",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_venda.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 386,
+          "metadata": {
+            "source": "lopes",
+            "domain_group": "lopes"
+          }
+        },
+        {
+          "name": "olx_aluguel",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_aluguel.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 500,
+          "metadata": {
+            "source": "olx",
+            "domain_group": "olx"
+          }
+        },
+        {
+          "name": "quinto_aluguel",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_aluguel.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 492,
+          "metadata": {
+            "source": "quinto",
+            "domain_group": "quinto"
+          }
+        },
+        {
+          "name": "lopes_aluguel",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_aluguel.csv",
+          "format": "csv",
+          "required": true,
+          "rows": 467,
+          "metadata": {
+            "source": "lopes",
+            "domain_group": "lopes"
+          }
+        }
+      ],
+      "metrics": {
+        "configured_scrapers": 6,
+        "successful_scrapers": 6,
+        "failed_scrapers": 0,
+        "parallel_source_limit": 3,
+        "source_results": [
+          {
+            "name": "olx_venda",
+            "source": "olx",
+            "domain_group": "olx",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_venda.csv",
+            "status": "success",
+            "rows": 409,
+            "message": "ok",
+            "duration_seconds": 1320.5720393999945
+          },
+          {
+            "name": "quinto_venda",
+            "source": "quinto",
+            "domain_group": "quinto",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_venda.csv",
+            "status": "success",
+            "rows": 492,
+            "message": "ok",
+            "duration_seconds": 1447.2793391998857
+          },
+          {
+            "name": "lopes_venda",
+            "source": "lopes",
+            "domain_group": "lopes",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_venda.csv",
+            "status": "success",
+            "rows": 386,
+            "message": "ok",
+            "duration_seconds": 1772.6251134998165
+          },
+          {
+            "name": "olx_aluguel",
+            "source": "olx",
+            "domain_group": "olx",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_aluguel.csv",
+            "status": "success",
+            "rows": 500,
+            "message": "ok",
+            "duration_seconds": 1598.1121026999317
+          },
+          {
+            "name": "quinto_aluguel",
+            "source": "quinto",
+            "domain_group": "quinto",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_aluguel.csv",
+            "status": "success",
+            "rows": 492,
+            "message": "ok",
+            "duration_seconds": 1649.3933445999864
+          },
+          {
+            "name": "lopes_aluguel",
+            "source": "lopes",
+            "domain_group": "lopes",
+            "output_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_aluguel.csv",
+            "status": "success",
+            "rows": 467,
+            "message": "ok",
+            "duration_seconds": 2193.3184628000017
+          }
+        ]
+      },
+      "validations": [
+        {
+          "name": "all_scrapers_succeeded",
+          "passed": true,
+          "message": "Todos os scrapers configurados devem concluir com sucesso.",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::olx_venda",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::olx_venda",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::quinto_venda",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::quinto_venda",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::lopes_venda",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::lopes_venda",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_venda.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::olx_aluguel",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_aluguel.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::olx_aluguel",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_aluguel.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::quinto_aluguel",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_aluguel.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::quinto_aluguel",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_aluguel.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::lopes_aluguel",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_aluguel.csv",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_non_empty::lopes_aluguel",
+          "passed": true,
+          "message": "Artefato deve conter registros: E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_aluguel.csv",
+          "severity": "error"
+        }
+      ],
+      "errors": [],
+      "blocked": false
+    },
+    {
+      "stage_name": "build_daily_snapshot",
+      "status": "success",
+      "objective": "Transformar a coleta bruta do dia em um snapshot diario consolidado.",
+      "started_at": "2026-04-07T14:48:04.972302+00:00",
+      "finished_at": "2026-04-07T14:48:14.272423+00:00",
+      "input_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026\\collect_general_listings\\manifest.json",
+      "output_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026\\build_daily_snapshot\\manifest.json",
+      "log_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\07-04-2026\\build_daily_snapshot.log",
+      "artifacts": [
+        {
+          "name": "daily_listings",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\listings_unificados.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 2746,
+          "metadata": {}
+        },
+        {
+          "name": "daily_properties",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\properties_unified.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 2616,
+          "metadata": {}
+        },
+        {
+          "name": "daily_property_listing_link",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\property_listing_link.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 2746,
+          "metadata": {}
+        },
+        {
+          "name": "daily_listings_csv",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\listings_unificados.csv",
+          "format": "csv",
+          "required": false,
+          "rows": 2746,
+          "metadata": {}
+        }
+      ],
+      "metrics": {
+        "input_files": [
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_venda.csv",
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_venda.csv",
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_venda.csv",
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\olx\\olx_aluguel.csv",
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\quinto\\quinto_aluguel.csv",
+          "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\07-04-2026\\lopes\\lopes_aluguel.csv"
+        ],
+        "input_file_count": 6,
+        "daily_listings_count": 2746,
+        "daily_properties_count": 2616,
+        "daily_links_count": 2746
+      },
+      "validations": [
+        {
+          "name": "canonical_schema_present",
+          "passed": true,
+          "message": "O schema canonico deve estar presente no snapshot diario.",
+          "severity": "error"
+        },
+        {
+          "name": "daily_snapshot_non_empty",
+          "passed": true,
+          "message": "O snapshot diario nao pode ficar vazio.",
+          "severity": "error"
+        },
+        {
+          "name": "minimum_business_keys",
+          "passed": true,
+          "message": "Cada listing deve possuir source, business_type e property_id ou listing_url.",
+          "severity": "error"
+        },
+        {
+          "name": "link_integrity",
+          "passed": true,
+          "message": "Todos os links devem apontar para propriedades existentes.",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::daily_listings",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\listings_unificados.parquet",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::daily_properties",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\properties_unified.parquet",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::daily_property_listing_link",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\property_listing_link.parquet",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::daily_listings_csv",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\07-04-2026\\listings_unificados.csv",
+          "severity": "error"
+        }
+      ],
+      "errors": [],
+      "blocked": false
+    },
+    {
+      "stage_name": "update_historical_store",
+      "status": "success",
+      "objective": "Incorporar o snapshot diario validado na base historica incremental.",
+      "started_at": "2026-04-07T14:48:14.275460+00:00",
+      "finished_at": "2026-04-07T14:48:40.497285+00:00",
+      "input_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026\\build_daily_snapshot\\manifest.json",
+      "output_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\07-04-2026\\update_historical_store\\manifest.json",
+      "log_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\07-04-2026\\update_historical_store.log",
+      "artifacts": [
+        {
+          "name": "historical_listings_latest",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\listings_unificados.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 9242,
+          "metadata": {}
+        },
+        {
+          "name": "historical_properties_latest",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\properties_unified.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 7857,
+          "metadata": {}
+        },
+        {
+          "name": "historical_property_listing_link_latest",
+          "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\property_listing_link.parquet",
+          "format": "parquet",
+          "required": true,
+          "rows": 9242,
+          "metadata": {}
+        }
+      ],
+      "metrics": {
+        "incoming_snapshot_count": 2746,
+        "inserted_count": 1130,
+        "updated_count": 1616,
+        "historical_listings_count": 9242,
+        "historical_properties_count": 7857,
+        "historical_links_count": 9242
+      },
+      "validations": [
+        {
+          "name": "upsert_accounting",
+          "passed": true,
+          "message": "A soma de inseridos e atualizados deve bater com o snapshot recebido.",
+          "severity": "error"
+        },
+        {
+          "name": "historical_key_uniqueness",
+          "passed": true,
+          "message": "A chave historica source|business_type|property_id deve ser unica.",
+          "severity": "error"
+        },
+        {
+          "name": "history_columns_present",
+          "passed": true,
+          "message": "As colunas de historico devem existir na base consolidada.",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::historical_listings_latest",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\listings_unificados.parquet",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::historical_properties_latest",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\properties_unified.parquet",
+          "severity": "error"
+        },
+        {
+          "name": "artifact_exists::historical_property_listing_link_latest",
+          "passed": true,
+          "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\property_listing_link.parquet",
+          "severity": "error"
+        }
+      ],
+      "errors": [],
+      "blocked": false
+    }
+  ]
+}

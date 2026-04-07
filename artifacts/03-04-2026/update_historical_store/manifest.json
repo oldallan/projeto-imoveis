@@ -1,0 +1,93 @@
+{
+  "context": {
+    "run_date": "03-04-2026",
+    "project_root": "E:\\Codigos\\PROJETOS\\projeto_imoveis",
+    "raw_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\03-04-2026",
+    "processed_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed",
+    "processed_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\03-04-2026",
+    "artifacts_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\03-04-2026",
+    "logs_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\03-04-2026"
+  },
+  "stage_name": "update_historical_store",
+  "status": "success",
+  "objective": "Incorporar o snapshot diario validado na base historica incremental.",
+  "started_at": "2026-04-03T20:40:23.459714+00:00",
+  "finished_at": "2026-04-03T20:40:24.484963+00:00",
+  "input_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\03-04-2026\\build_daily_snapshot\\manifest.json",
+  "output_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\03-04-2026\\update_historical_store\\manifest.json",
+  "log_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\03-04-2026\\update_historical_store.log",
+  "artifacts": [
+    {
+      "name": "historical_listings_latest",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\listings_unificados.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 1574,
+      "metadata": {}
+    },
+    {
+      "name": "historical_properties_latest",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\properties_unified.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 1495,
+      "metadata": {}
+    },
+    {
+      "name": "historical_property_listing_link_latest",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\property_listing_link.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 1574,
+      "metadata": {}
+    }
+  ],
+  "metrics": {
+    "incoming_snapshot_count": 431,
+    "inserted_count": 293,
+    "updated_count": 138,
+    "historical_listings_count": 1574,
+    "historical_properties_count": 1495,
+    "historical_links_count": 1574
+  },
+  "validations": [
+    {
+      "name": "upsert_accounting",
+      "passed": true,
+      "message": "A soma de inseridos e atualizados deve bater com o snapshot recebido.",
+      "severity": "error"
+    },
+    {
+      "name": "historical_key_uniqueness",
+      "passed": true,
+      "message": "A chave historica source|business_type|property_id deve ser unica.",
+      "severity": "error"
+    },
+    {
+      "name": "history_columns_present",
+      "passed": true,
+      "message": "As colunas de historico devem existir na base consolidada.",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::historical_listings_latest",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\listings_unificados.parquet",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::historical_properties_latest",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\properties_unified.parquet",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::historical_property_listing_link_latest",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\property_listing_link.parquet",
+      "severity": "error"
+    }
+  ],
+  "errors": [],
+  "blocked": false
+}

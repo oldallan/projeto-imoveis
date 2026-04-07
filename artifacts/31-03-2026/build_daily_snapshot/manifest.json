@@ -1,0 +1,119 @@
+{
+  "context": {
+    "run_date": "31-03-2026",
+    "project_root": "E:\\Codigos\\PROJETOS\\projeto_imoveis",
+    "raw_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026",
+    "processed_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed",
+    "processed_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026",
+    "artifacts_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\31-03-2026",
+    "logs_run_dir": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\31-03-2026"
+  },
+  "stage_name": "build_daily_snapshot",
+  "status": "success",
+  "objective": "Transformar a coleta bruta do dia em um snapshot diario consolidado.",
+  "started_at": "2026-04-01T18:03:15.262858+00:00",
+  "finished_at": "2026-04-01T18:03:15.881761+00:00",
+  "input_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\31-03-2026\\collect_general_listings\\manifest.json",
+  "output_manifest": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\artifacts\\31-03-2026\\build_daily_snapshot\\manifest.json",
+  "log_path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\logs\\31-03-2026\\build_daily_snapshot.log",
+  "artifacts": [
+    {
+      "name": "daily_listings",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\listings_unificados.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 431,
+      "metadata": {}
+    },
+    {
+      "name": "daily_properties",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\properties_unified.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 412,
+      "metadata": {}
+    },
+    {
+      "name": "daily_property_listing_link",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\property_listing_link.parquet",
+      "format": "parquet",
+      "required": true,
+      "rows": 431,
+      "metadata": {}
+    },
+    {
+      "name": "daily_listings_csv",
+      "path": "E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\listings_unificados.csv",
+      "format": "csv",
+      "required": false,
+      "rows": 431,
+      "metadata": {}
+    }
+  ],
+  "metrics": {
+    "input_files": [
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\olx\\olx_venda.csv",
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\olx\\olx_aluguel.csv",
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\lopes\\lopes_venda.csv",
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\lopes\\lopes_aluguel.csv",
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\quinto\\quinto_venda.csv",
+      "E:\\Codigos\\PROJETOS\\projeto_imoveis\\raw\\31-03-2026\\quinto\\quinto_aluguel.csv"
+    ],
+    "input_file_count": 6,
+    "daily_listings_count": 431,
+    "daily_properties_count": 412,
+    "daily_links_count": 431
+  },
+  "validations": [
+    {
+      "name": "canonical_schema_present",
+      "passed": true,
+      "message": "O schema canonico deve estar presente no snapshot diario.",
+      "severity": "error"
+    },
+    {
+      "name": "daily_snapshot_non_empty",
+      "passed": true,
+      "message": "O snapshot diario nao pode ficar vazio.",
+      "severity": "error"
+    },
+    {
+      "name": "minimum_business_keys",
+      "passed": true,
+      "message": "Cada listing deve possuir source, business_type e property_id ou listing_url.",
+      "severity": "error"
+    },
+    {
+      "name": "link_integrity",
+      "passed": true,
+      "message": "Todos os links devem apontar para propriedades existentes.",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::daily_listings",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\listings_unificados.parquet",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::daily_properties",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\properties_unified.parquet",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::daily_property_listing_link",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\property_listing_link.parquet",
+      "severity": "error"
+    },
+    {
+      "name": "artifact_exists::daily_listings_csv",
+      "passed": true,
+      "message": "Artefato deve existir: E:\\Codigos\\PROJETOS\\projeto_imoveis\\processed\\31-03-2026\\listings_unificados.csv",
+      "severity": "error"
+    }
+  ],
+  "errors": [],
+  "blocked": false
+}
