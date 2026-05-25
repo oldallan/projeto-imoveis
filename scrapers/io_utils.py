@@ -21,4 +21,5 @@ def save_parquet_records(records: list[Mapping[str, Any]], filename: str | Path)
     frame = pd.DataFrame(records)
     if not frame.empty:
         frame = frame.replace(to_replace=r"^\s*$", value=None, regex=True)
+        frame = frame.infer_objects(copy=False)
     frame.to_parquet(output_path, index=False)
