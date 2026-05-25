@@ -4,15 +4,18 @@ VISAO GERAL
 Este projeto executa um pipeline de coleta, padronizacao e consolidacao de anuncios imobiliarios de venda e aluguel. Os dados sao extraidos de OLX, QuintoAndar e Lopes, transformados para um schema unico e incorporados em uma base historica incremental, pronta para analise.
 
 COMO FUNCIONA
-O fluxo principal e dividido em 3 etapas:
+O fluxo principal e dividido em 4 etapas:
 
-1. collect_general_listings
-Executa os scrapers de cada fonte e gera a coleta bruta diaria em arquivos separados por data.
+1. collect_discovery
+Executa o discovery incremental de URLs por fonte, buscando apenas anuncios novos ou atualizados quando possivel.
 
-2. build_daily_snapshot
+2. collect_listings
+Consome as URLs descobertas e coleta os dados completos dos anuncios em arquivos finais por fonte.
+
+3. build_daily_snapshot
 Normaliza os campos, remove duplicidades e gera o snapshot diario consolidado.
 
-3. update_historical_store
+4. update_historical_store
 Aplica upsert no consolidado historico, preservando uma base acumulada e atualizada ao longo do tempo.
 
 FONTES DE DADOS
@@ -22,7 +25,7 @@ FONTES DE DADOS
 
 SAIDAS GERADAS
 - raw/<data>/
-  Armazena os arquivos brutos coletados por fonte e tipo de negocio.
+  Armazena os arquivos de discovery e os listings finais coletados por fonte.
 
 - processed/<data>/
   Armazena o snapshot diario consolidado da execucao.
