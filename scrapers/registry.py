@@ -1,16 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from scrapers import (
-    lopes_aluguel,
-    lopes_venda,
-    olx_aluguel,
-    olx_venda,
-    quinto_aluguel,
-    quinto_venda,
-)
+from scrapers import lopes, olx, quinto
 from scrapers.output_paths import build_dated_output_path
 
 
@@ -18,135 +11,99 @@ from scrapers.output_paths import build_dated_output_path
 class ScraperDefinition:
     name: str
     source: str
-    filename: str
-    runner: Callable[..., str | None]
-    domain_group: str | None = None
-    params: dict[str, Any] = field(default_factory=dict)
+    discovery_filename: str
+    listings_filename: str
+    run_discovery: Callable[..., Any]
+    run_collection: Callable[..., dict[str, Any] | None]
+    discovery_metadata: dict[str, Any] = field(default_factory=dict)
+    discovery_options: dict[str, Any] = field(default_factory=dict)
+    collection_options: dict[str, Any] = field(default_factory=dict)
 
-    def output_path(self, run_date: str) -> str:
-        return build_dated_output_path(self.source, self.filename, run_date=run_date)
+    def discovery_output_path(self, run_date: str) -> str:
+        return build_dated_output_path(self.source, self.discovery_filename, run_date=run_date)
+
+    def discovery_parquet_output_path(self, run_date: str) -> str:
+        return str(build_dated_output_path(self.source, self.discovery_filename, run_date=run_date)).replace(".csv", ".parquet")
+
+    def listings_output_path(self, run_date: str) -> str:
+        return build_dated_output_path(self.source, self.listings_filename, run_date=run_date)
+
+    def listings_parquet_output_path(self, run_date: str) -> str:
+        return str(build_dated_output_path(self.source, self.listings_filename, run_date=run_date)).replace(".csv", ".parquet")
 
 
 def get_scraper_definitions() -> list[ScraperDefinition]:
     return [
         ScraperDefinition(
-            name="olx_venda",
+            name="olx",
             source="olx",
-            filename="olx_venda.csv",
-            runner=olx_venda.run,
-            domain_group="olx",
-            params={
-                "max_pages": 10,
-                "min_delay_seconds": 2.0,
-                "max_delay_seconds": 8.0,
-                "target_delay_seconds": 3.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 10,
-                "detail_min_delay_seconds": 2.0,
-                "detail_max_delay_seconds": 6.0,
-                "detail_target_delay_seconds": 2.5,
-                "detail_max_consecutive_failures": 3,
+            discovery_filename="olx_discovery.csv",
+            listings_filename="olx_listings.csv",
+            run_discovery=olx.collect_discovery,
+            run_collection=olx.collect_listings,
+            discovery_metadata={
+                "discovery_mode": "delta",
+                "delta_rule": "new_or_price_changed",
+            },
+            discovery_options={
+                "max_pages": 100,
+            },
+            collection_options={
+                "retry_times": 2,
+                "autothrottle_start_delay": 1.0,
+                "autothrottle_max_delay": 8.0,
+                "autothrottle_target_concurrency": 1.0,
+                "concurrent_requests": 3,
+                "concurrent_requests_per_domain": 3,
+                "download_delay": 1.0,
+                "download_timeout": 30,
+                "max_consecutive_failures": 100,
             },
         ),
         ScraperDefinition(
-            name="olx_aluguel",
-            source="olx",
-            filename="olx_aluguel.csv",
-            runner=olx_aluguel.run,
-            domain_group="olx",
-            params={
-                "max_pages": 10,
-                "min_delay_seconds": 2.0,
-                "max_delay_seconds": 8.0,
-                "target_delay_seconds": 3.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 10,
-                "detail_min_delay_seconds": 2.0,
-                "detail_max_delay_seconds": 6.0,
-                "detail_target_delay_seconds": 2.5,
-                "detail_max_consecutive_failures": 3,
-            },
-        ),
-        ScraperDefinition(
-            name="lopes_venda",
+            name="lopes",
             source="lopes",
-            filename="lopes_venda.csv",
-            runner=lopes_venda.run,
-            domain_group="lopes",
-            params={
-                "max_pages": 25,
-                "lines_per_page": 23,
-                "min_delay_seconds": 1.5,
-                "max_delay_seconds": 6.0,
-                "target_delay_seconds": 2.5,
-                "retry_min_delay_seconds": 2.0,
-                "retry_max_delay_seconds": 6.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 5,
-                "detail_min_delay_seconds": 1.5,
-                "detail_max_delay_seconds": 5.0,
-                "detail_target_delay_seconds": 2.0,
-                "detail_max_consecutive_failures": 3,
+            discovery_filename="lopes_discovery.csv",
+            listings_filename="lopes_listings.csv",
+            run_discovery=lopes.collect_discovery,
+            run_collection=lopes.collect_listings,
+            discovery_metadata={
+                "discovery_mode": "delta",
+                "delta_rule": "new_or_lastmod_changed",
+            },
+            collection_options={
+                "retry_times": 2,
+                "autothrottle_start_delay": 1.0,
+                "autothrottle_max_delay": 8.0,
+                "autothrottle_target_concurrency": 1.0,
+                "concurrent_requests": 3,
+                "concurrent_requests_per_domain": 3,
+                "download_delay": 1.0,
+                "download_timeout": 30,
+                "max_consecutive_failures": 100,
             },
         ),
         ScraperDefinition(
-            name="lopes_aluguel",
-            source="lopes",
-            filename="lopes_aluguel.csv",
-            runner=lopes_aluguel.run,
-            domain_group="lopes",
-            params={
-                "max_pages": 25,
-                "lines_per_page": 23,
-                "min_delay_seconds": 1.5,
-                "max_delay_seconds": 6.0,
-                "target_delay_seconds": 2.5,
-                "retry_min_delay_seconds": 2.0,
-                "retry_max_delay_seconds": 6.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 5,
-                "detail_min_delay_seconds": 1.5,
-                "detail_max_delay_seconds": 5.0,
-                "detail_target_delay_seconds": 2.0,
-                "detail_max_consecutive_failures": 3,
-            },
-        ),
-        ScraperDefinition(
-            name="quinto_venda",
+            name="quinto",
             source="quinto",
-            filename="quinto_venda.csv",
-            runner=quinto_venda.run,
-            domain_group="quinto",
-            params={
-                "max_batches": 40,
-                "min_delay_seconds": 1.5,
-                "max_delay_seconds": 5.0,
-                "target_delay_seconds": 2.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 2,
-                "detail_min_delay_seconds": 1.5,
-                "detail_max_delay_seconds": 5.0,
-                "detail_target_delay_seconds": 2.0,
-                "detail_max_consecutive_failures": 3,
+            discovery_filename="quinto_discovery.csv",
+            listings_filename="quinto_listings.csv",
+            run_discovery=quinto.collect_discovery,
+            run_collection=quinto.collect_listings,
+            discovery_metadata={
+                "discovery_mode": "delta",
+                "delta_rule": "new_or_lastmod_changed",
             },
-        ),
-        ScraperDefinition(
-            name="quinto_aluguel",
-            source="quinto",
-            filename="quinto_aluguel.csv",
-            runner=quinto_aluguel.run,
-            domain_group="quinto",
-            params={
-                "max_batches": 40,
-                "min_delay_seconds": 1.5,
-                "max_delay_seconds": 5.0,
-                "target_delay_seconds": 2.0,
-                "max_consecutive_failures": 2,
-                "early_stop_on_low_yield": 2,
-                "detail_min_delay_seconds": 1.5,
-                "detail_max_delay_seconds": 5.0,
-                "detail_target_delay_seconds": 2.0,
-                "detail_max_consecutive_failures": 3,
+            collection_options={
+                "retry_times": 2,
+                "autothrottle_start_delay": 1.0,
+                "autothrottle_max_delay": 8.0,
+                "autothrottle_target_concurrency": 1.0,
+                "concurrent_requests": 3,
+                "concurrent_requests_per_domain": 3,
+                "download_delay": 1.0,
+                "download_timeout": 30,
+                "max_consecutive_failures": 100,
             },
         ),
     ]
