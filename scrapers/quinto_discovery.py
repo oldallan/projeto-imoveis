@@ -119,6 +119,7 @@ def collect_discovery_to_file(
             run_date=run_date,
             source="quinto",
             filename=DISCOVERY_FILENAME,
+            project_root=infer_output_root_from_output_path(output_path),
         )
         resolved_previous_output_path = str(previous_path) if previous_path else None
 

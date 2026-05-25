@@ -41,16 +41,22 @@ def build_scoped_output_dir(base_dir: Path, sources: list[str] | tuple[str, ...]
     return base_dir / f"sources__{token}"
 
 
-def build_context(run_date: str, project_root: Path | None = None) -> PipelineContext:
+def build_context(
+    run_date: str,
+    project_root: Path | None = None,
+    output_root: str | Path | None = None,
+) -> PipelineContext:
     root = (project_root or Path.cwd()).resolve()
+    output = (Path(output_root) if output_root is not None else root).resolve()
     return PipelineContext(
         run_date=run_date,
         project_root=root,
-        raw_dir=root / "raw" / run_date,
-        processed_dir=root / "processed",
-        processed_run_dir=root / "processed" / run_date,
-        artifacts_run_dir=root / "artifacts" / run_date,
-        logs_run_dir=root / "logs" / run_date,
+        output_root=output,
+        raw_dir=output / "raw" / run_date,
+        processed_dir=output / "processed",
+        processed_run_dir=output / "processed" / run_date,
+        artifacts_run_dir=output / "artifacts" / run_date,
+        logs_run_dir=output / "logs" / run_date,
     )
 
 

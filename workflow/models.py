@@ -69,6 +69,7 @@ class StageResult:
 class PipelineContext:
     run_date: str
     project_root: Path
+    output_root: Path
     raw_dir: Path
     processed_dir: Path
     processed_run_dir: Path
@@ -79,6 +80,7 @@ class PipelineContext:
         return {
             "run_date": self.run_date,
             "project_root": str(self.project_root),
+            "output_root": str(self.output_root),
             "raw_dir": str(self.raw_dir),
             "processed_dir": str(self.processed_dir),
             "processed_run_dir": str(self.processed_run_dir),

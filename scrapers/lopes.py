@@ -14,11 +14,13 @@ DEFAULT_LISTINGS_PARQUET_OUTPUT_PATH = str(Path(DEFAULT_LISTINGS_OUTPUT_PATH).wi
 def collect_discovery(
     output_path: str = DEFAULT_DISCOVERY_OUTPUT_PATH,
     parquet_output_path: str | None = None,
+    previous_output_path: str | None = None,
     verbose: bool = False,
 ) -> dict[str, object] | None:
     return collect_discovery_to_file(
         output_path=output_path,
         parquet_output_path=parquet_output_path or str(Path(output_path).with_suffix(".parquet")),
+        previous_output_path=previous_output_path,
         verbose=verbose,
     )
 

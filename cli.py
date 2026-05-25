@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_all_parser = subparsers.add_parser("run-all", help="Executa todas as etapas em sequencia")
     run_all_parser.add_argument("--date", default=default_run_date(), help="Data de execucao no formato DD-MM-YYYY")
+    run_all_parser.add_argument("--output-path", required=True, help="Raiz persistente para raw, processed, artifacts e logs")
     run_all_parser.add_argument("--from-stage", choices=STAGE_CHOICES)
     run_all_parser.add_argument("--verbose", action="store_true", help="Ativa logging detalhado nos scrapers")
     run_all_parser.add_argument(
@@ -35,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_stage_parser = subparsers.add_parser("run-stage", help="Executa uma etapa isolada")
     run_stage_parser.add_argument("stage_name", choices=STAGE_CHOICES)
     run_stage_parser.add_argument("--date", default=default_run_date(), help="Data de execucao no formato DD-MM-YYYY")
+    run_stage_parser.add_argument("--output-path", required=True, help="Raiz persistente para raw, processed, artifacts e logs")
     run_stage_parser.add_argument("--input-manifest", help="Manifesto da etapa anterior")
     run_stage_parser.add_argument("--verbose", action="store_true", help="Ativa logging detalhado nos scrapers")
     run_stage_parser.add_argument(
@@ -63,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
             result = runner.run_stage(
                 stage_name=args.stage_name,
                 run_date=args.date,
+                output_root=args.output_path,
                 input_manifest=args.input_manifest,
                 verbose=args.verbose,
                 sources=args.sources,
@@ -73,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run-all":
             result = runner.run_all(
                 run_date=args.date,
+                output_root=args.output_path,
                 from_stage=args.from_stage,
                 verbose=args.verbose,
                 force_discovery=args.force_discovery,

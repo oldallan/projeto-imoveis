@@ -2,4 +2,4 @@
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(["run-all"]))
+    raise SystemExit(main(["run-all", "--output-path", "."]))

@@ -83,6 +83,11 @@ pipeline.
 
 ## Como Executar
 
+`run-all` e `run-stage` exigem `--output-path`. Esse caminho e a raiz
+persistente de `raw/`, `processed/`, `artifacts/` e `logs/`. Use
+`--output-path .` para preservar o layout local, ou aponte para um storage
+persistente em ambiente remoto.
+
 Listar stages disponiveis:
 
 ```sh
@@ -92,47 +97,47 @@ python cli.py list-stages
 Rodar o pipeline completo para o dia atual:
 
 ```sh
-python cli.py run-all
+python cli.py run-all --output-path .
 ```
 
 Rodar o pipeline completo para uma data:
 
 ```sh
-python cli.py run-all --date DD-MM-YYYY
+python cli.py run-all --output-path . --date DD-MM-YYYY
 ```
 
 Rodar com logs mais detalhados dos scrapers:
 
 ```sh
-python cli.py run-all --date DD-MM-YYYY --verbose
+python cli.py run-all --output-path . --date DD-MM-YYYY --verbose
 ```
 
 Forcar novo discovery mesmo quando ja existe manifesto de sucesso:
 
 ```sh
-python cli.py run-all --date DD-MM-YYYY --force-discovery
+python cli.py run-all --output-path . --date DD-MM-YYYY --force-discovery
 ```
 
 Retomar o pipeline a partir de uma etapa:
 
 ```sh
-python cli.py run-all --date DD-MM-YYYY --from-stage collect_listings
+python cli.py run-all --output-path . --date DD-MM-YYYY --from-stage collect_listings
 ```
 
 Executar uma etapa isolada:
 
 ```sh
-python cli.py run-stage collect_discovery --date DD-MM-YYYY
-python cli.py run-stage collect_listings --date DD-MM-YYYY
-python cli.py run-stage build_daily_snapshot --date DD-MM-YYYY
-python cli.py run-stage update_historical_store --date DD-MM-YYYY
+python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY
+python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY
+python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY
+python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY
 ```
 
 Limitar uma etapa isolada a fontes especificas:
 
 ```sh
-python cli.py run-stage collect_discovery --date DD-MM-YYYY --sources olx lopes
-python cli.py run-stage collect_listings --date DD-MM-YYYY --sources olx lopes
+python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx lopes
+python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx lopes
 ```
 
 Quando `--sources` e usado, manifests e outputs escopados podem ficar em
@@ -201,10 +206,10 @@ Enquanto a primeira coleta de Lopes e QuintoAndar ainda estiver em andamento,
 recomenda-se rodar a OLX separadamente com `--sources`:
 
 ```sh
-python cli.py run-stage collect_discovery --date DD-MM-YYYY --sources olx
-python cli.py run-stage collect_listings --date DD-MM-YYYY --sources olx
-python cli.py run-stage build_daily_snapshot --date DD-MM-YYYY --sources olx
-python cli.py run-stage update_historical_store --date DD-MM-YYYY --sources olx
+python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx
+python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx
+python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY --sources olx
+python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY --sources olx
 ```
 
 Depois que Lopes e QuintoAndar concluirem a primeira coleta, o pipeline pode
@@ -276,7 +281,7 @@ python -m pytest
 
 ```text
 cli.py                    CLI principal do pipeline
-main_pipeline.py           Atalho para `python cli.py run-all`
+main_pipeline.py           Atalho para `python cli.py run-all --output-path .`
 parquet_to_csv.py          Exportador Parquet -> CSV
 workaround_quinto_missing.py
 pipelines/                 Normalizacao, dedupe, snapshot, historico e CEP

@@ -34,6 +34,14 @@ def infer_run_date_from_output_path(output_path: str | Path) -> str | None:
     return candidate
 
 
+def infer_output_root_from_output_path(output_path: str | Path) -> Path | None:
+    path = Path(output_path).resolve()
+    parents = path.parents
+    if len(parents) < 4 or parents[2].name != "raw":
+        return None
+    return parents[3]
+
+
 def find_previous_output(
     *,
     run_date: str,

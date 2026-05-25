@@ -7,7 +7,7 @@ import scrapy
 
 from scrapy.http import Request, Response
 
-from scrapers.discovery_incremental import _has_non_empty_csv_rows
+from scrapers.discovery_incremental import _has_non_empty_csv_rows, infer_output_root_from_output_path
 from scrapers.logging_utils import log_info
 from scrapers.olx_shared import *  # noqa: F403
 from scrapers.scrapy_runner import run_spider
@@ -709,7 +709,8 @@ def collect_discovery_records(
     verbose: bool = False,
 ) -> list[dict[str, Any]]:
     resolved_run_date = run_date or default_run_date()
-    previous_path = previous_output_path or str(find_previous_output(resolved_run_date) or "")
+    output_root = infer_output_root_from_output_path(default_output_path(resolved_run_date))
+    previous_path = previous_output_path or str(find_previous_output(resolved_run_date, project_root=output_root) or "")
     previous_state = load_previous_run_state(previous_path)
     records, metrics, invalid_records = run_scrapy_discovery(
         run_date=resolved_run_date,
@@ -746,7 +747,8 @@ def collect_discovery_to_file(
 ) -> dict[str, Any]:
     target_output_path = output_path or default_output_path(run_date)
     resolved_run_date = run_date or _infer_run_date_from_output_path(target_output_path) or default_run_date()
-    resolved_previous_output_path = previous_output_path or str(find_previous_output(resolved_run_date) or "")
+    output_root = infer_output_root_from_output_path(target_output_path)
+    resolved_previous_output_path = previous_output_path or str(find_previous_output(resolved_run_date, project_root=output_root) or "")
     previous_state = load_previous_run_state(resolved_previous_output_path)
     records, metrics, invalid_records = run_scrapy_discovery(
         run_date=resolved_run_date,

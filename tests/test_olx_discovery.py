@@ -906,6 +906,7 @@ class OlxDiscoveryTests(unittest.TestCase):
         mocked_collect_discovery_to_file.assert_called_once_with(
             output_path=str(output_path),
             parquet_output_path=str(output_path.with_suffix(".parquet")),
+            previous_output_path=None,
             max_pages=100,
             verbose=True,
         )

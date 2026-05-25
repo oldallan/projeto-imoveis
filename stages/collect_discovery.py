@@ -6,6 +6,7 @@ from time import perf_counter
 
 import pandas as pd
 
+from scrapers.discovery_incremental import find_previous_output
 from scrapers.registry import get_scraper_definitions
 from workflow.models import ArtifactRecord, StageResult, ValidationResult
 from workflow.paths import normalize_selected_sources
@@ -61,7 +62,14 @@ class CollectDiscoveryStage(Stage):
         return artifacts, metrics, errors
 
     def _run_scraper(self, scraper, context, logger, verbose: bool):
-        output_path = Path(scraper.discovery_output_path(context.run_date))
+        output_path = context.raw_dir / scraper.source / scraper.discovery_filename
+        parquet_output_path = output_path.with_suffix(".parquet")
+        previous_output_path = find_previous_output(
+            run_date=context.run_date,
+            source=scraper.source,
+            filename=scraper.discovery_filename,
+            project_root=context.output_root,
+        )
         logger.info(
             "discovery_start name=%s source=%s output=%s",
             scraper.name,
@@ -79,6 +87,8 @@ class CollectDiscoveryStage(Stage):
         try:
             returned_payload = scraper.run_discovery(
                 output_path=str(output_path),
+                parquet_output_path=str(parquet_output_path),
+                previous_output_path=str(previous_output_path) if previous_output_path else None,
                 verbose=verbose,
                 **scraper.discovery_options,
             )

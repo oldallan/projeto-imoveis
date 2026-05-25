@@ -63,7 +63,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
 
             def make_runner(name: str):
                 def runner(output_path: str, **kwargs):
@@ -105,15 +105,8 @@ class CollectDiscoveryStageTests(unittest.TestCase):
                 ),
             ]
 
-            def discovery_output_path(self, run_date: str) -> str:
-                return str(root / run_date / self.source / self.discovery_filename)
-
             started_at = time.perf_counter()
-            with patch("stages.collect_discovery.get_scraper_definitions", return_value=scrapers), patch.object(
-                ScraperDefinition,
-                "discovery_output_path",
-                discovery_output_path,
-            ):
+            with patch("stages.collect_discovery.get_scraper_definitions", return_value=scrapers):
                 artifacts, metrics, errors = stage.run(context, None, logger)
             elapsed = time.perf_counter() - started_at
         finally:
@@ -136,7 +129,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
         captured: list[bool] = []
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
 
             def runner(output_path: str, verbose: bool = False, **kwargs):
                 captured.append(verbose)
@@ -161,14 +154,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
                 },
             )
 
-            def discovery_output_path(self, run_date: str) -> str:
-                return str(root / run_date / self.source / self.discovery_filename)
-
-            with patch("stages.collect_discovery.get_scraper_definitions", return_value=[scraper]), patch.object(
-                ScraperDefinition,
-                "discovery_output_path",
-                discovery_output_path,
-            ):
+            with patch("stages.collect_discovery.get_scraper_definitions", return_value=[scraper]):
                 stage.run(context, None, logger, stage_options={"verbose": True})
         finally:
             shutil.rmtree(root, ignore_errors=True)
@@ -184,7 +170,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
 
             def runner(output_path: str, verbose: bool = False, **kwargs):
                 output = Path(output_path)
@@ -210,14 +196,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
                 },
             )
 
-            def discovery_output_path(self, run_date: str) -> str:
-                return str(root / run_date / self.source / self.discovery_filename)
-
-            with patch("stages.collect_discovery.get_scraper_definitions", return_value=[scraper]), patch.object(
-                ScraperDefinition,
-                "discovery_output_path",
-                discovery_output_path,
-            ):
+            with patch("stages.collect_discovery.get_scraper_definitions", return_value=[scraper]):
                 artifacts, metrics, errors = stage.run(context, None, logger)
                 validations = stage.validate(
                     context,
@@ -241,7 +220,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
             called_sources: list[str] = []
 
             def make_runner(name: str):
@@ -263,11 +242,7 @@ class CollectDiscoveryStageTests(unittest.TestCase):
                 ScraperDefinition("quinto", "quinto", "quinto_discovery.csv", "quinto_listings.csv", make_runner("quinto"), lambda **_: None),
             ]
 
-            with patch("stages.collect_discovery.get_scraper_definitions", return_value=scrapers), patch.object(
-                ScraperDefinition,
-                "discovery_output_path",
-                lambda self, run_date: str(root / run_date / self.source / self.discovery_filename),
-            ):
+            with patch("stages.collect_discovery.get_scraper_definitions", return_value=scrapers):
                 artifacts, metrics, errors = stage.run(
                     context,
                     None,
@@ -294,7 +269,7 @@ class CollectListingsStageTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
             input_manifest = {
                 "status": "success",
                 "artifacts": [
@@ -355,22 +330,8 @@ class CollectListingsStageTests(unittest.TestCase):
                 ScraperDefinition("quinto", "quinto", "quinto_discovery.csv", "quinto_listings.csv", lambda **_: None, make_runner("quinto")),
             ]
 
-            def listings_output_path(self, run_date: str) -> str:
-                return str(root / run_date / self.source / self.listings_filename)
-
-            def listings_parquet_output_path(self, run_date: str) -> str:
-                return str((root / run_date / self.source / self.listings_filename).with_suffix(".parquet"))
-
             started_at = time.perf_counter()
-            with patch("stages.collect_listings.get_scraper_definitions", return_value=scrapers), patch.object(
-                ScraperDefinition,
-                "listings_output_path",
-                listings_output_path,
-            ), patch.object(
-                ScraperDefinition,
-                "listings_parquet_output_path",
-                listings_parquet_output_path,
-            ):
+            with patch("stages.collect_listings.get_scraper_definitions", return_value=scrapers):
                 artifacts, metrics, errors = stage.run(context, input_manifest, logger)
             elapsed = time.perf_counter() - started_at
         finally:
@@ -392,7 +353,7 @@ class CollectListingsStageTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
 
         try:
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
             input_manifest = {
                 "status": "success",
                 "artifacts": [
@@ -446,15 +407,7 @@ class CollectListingsStageTests(unittest.TestCase):
                 ScraperDefinition("lopes", "lopes", "lopes_discovery.csv", "lopes_listings.csv", lambda **_: None, make_runner("lopes")),
             ]
 
-            with patch("stages.collect_listings.get_scraper_definitions", return_value=scrapers), patch.object(
-                ScraperDefinition,
-                "listings_output_path",
-                lambda self, run_date: str(root / run_date / self.source / self.listings_filename),
-            ), patch.object(
-                ScraperDefinition,
-                "listings_parquet_output_path",
-                lambda self, run_date: str((root / run_date / self.source / self.listings_filename).with_suffix(".parquet")),
-            ):
+            with patch("stages.collect_listings.get_scraper_definitions", return_value=scrapers):
                 artifacts, metrics, errors = stage.run(
                     context,
                     input_manifest,
@@ -472,7 +425,7 @@ class CollectListingsStageTests(unittest.TestCase):
     def test_stage_fails_when_requested_source_has_no_discovery_artifact(self):
         stage = CollectListingsStage()
         logger = DummyLogger()
-        context = SimpleNamespace(run_date="06-04-2026")
+        context = build_context("06-04-2026", Path("tests_runtime_missing_source"))
         input_manifest = {
             "status": "success",
             "artifacts": [
@@ -509,7 +462,7 @@ class CollectListingsStageTests(unittest.TestCase):
                 writer = csv.DictWriter(file, fieldnames=["business_type", "lastmod", "listing_id", "listing_url"])
                 writer.writeheader()
 
-            context = SimpleNamespace(run_date="06-04-2026")
+            context = build_context("06-04-2026", root)
             input_manifest = {
                 "status": "success",
                 "artifacts": [
@@ -569,18 +522,15 @@ class CollectListingsStageTests(unittest.TestCase):
 
         try:
             run_date = "06-04-2026"
-            context = SimpleNamespace(
-                run_date=run_date,
-                artifacts_run_dir=root / "artifacts" / run_date,
-            )
-            input_csv = root / run_date / "lopes" / "lopes_discovery.csv"
+            context = build_context(run_date, root)
+            input_csv = context.raw_dir / "lopes" / "lopes_discovery.csv"
             input_csv.parent.mkdir(parents=True, exist_ok=True)
             with open(input_csv, "w", newline="", encoding="utf-8") as file:
                 writer = csv.DictWriter(file, fieldnames=["listing_url", "business_type"])
                 writer.writeheader()
                 writer.writerow({"listing_url": "https://example.com/1", "business_type": "sale"})
 
-            output_csv = root / run_date / "lopes" / "lopes_listings.csv"
+            output_csv = context.raw_dir / "lopes" / "lopes_listings.csv"
             output_csv.parent.mkdir(parents=True, exist_ok=True)
             with open(output_csv, "w", newline="", encoding="utf-8") as file:
                 writer = csv.DictWriter(file, fieldnames=["property_id", "listing_url", "business_type"])
@@ -629,15 +579,7 @@ class CollectListingsStageTests(unittest.TestCase):
                     )
                 ],
             )
-            with runner_mock, patch.object(
-                ScraperDefinition,
-                "listings_output_path",
-                lambda self, value: str(root / value / self.source / self.listings_filename),
-            ), patch.object(
-                ScraperDefinition,
-                "listings_parquet_output_path",
-                lambda self, value: str((root / value / self.source / self.listings_filename).with_suffix(".parquet")),
-            ):
+            with runner_mock:
                 artifacts, metrics, errors = stage.run(context, input_manifest, logger)
         finally:
             shutil.rmtree(root, ignore_errors=True)
@@ -1151,6 +1093,20 @@ class PipelineRunnerFlowTests(unittest.TestCase):
             {"sources": ["lopes"]},
         )
 
+    def test_build_context_can_separate_project_root_and_output_root(self):
+        project_root = Path("tests_runtime_project_root").resolve()
+        output_root = Path("tests_runtime_output_root").resolve()
+
+        context = build_context("07-04-2026", project_root, output_root=output_root)
+
+        self.assertEqual(context.project_root, project_root)
+        self.assertEqual(context.output_root, output_root)
+        self.assertEqual(context.raw_dir, output_root / "raw" / "07-04-2026")
+        self.assertEqual(context.processed_dir, output_root / "processed")
+        self.assertEqual(context.artifacts_run_dir, output_root / "artifacts" / "07-04-2026")
+        self.assertEqual(context.logs_run_dir, output_root / "logs" / "07-04-2026")
+        self.assertEqual(context.to_dict()["output_root"], str(output_root))
+
     def test_build_snapshot_requires_collect_listings_manifest(self):
         runtime_dir = Path("tests_runtime_runner")
         runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -1639,45 +1595,65 @@ class UpdateHistoricalStoreStageTests(unittest.TestCase):
 
 
 class CliParserTests(unittest.TestCase):
+    def test_list_stages_does_not_require_output_path(self):
+        parser = build_parser()
+        args = parser.parse_args(["list-stages"])
+
+        self.assertEqual(args.command, "list-stages")
+
+    def test_run_all_requires_output_path(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run-all"])
+
+    def test_run_stage_requires_output_path(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run-stage", "collect_discovery"])
+
     def test_run_all_accepts_verbose(self):
         parser = build_parser()
-        args = parser.parse_args(["run-all", "--verbose"])
+        args = parser.parse_args(["run-all", "--output-path", "runtime", "--verbose"])
 
         self.assertTrue(args.verbose)
+        self.assertEqual(args.output_path, "runtime")
 
     def test_run_all_accepts_force_discovery(self):
         parser = build_parser()
-        args = parser.parse_args(["run-all", "--force-discovery"])
+        args = parser.parse_args(["run-all", "--output-path", "runtime", "--force-discovery"])
 
         self.assertTrue(args.force_discovery)
 
     def test_run_stage_accepts_verbose(self):
         parser = build_parser()
-        args = parser.parse_args(["run-stage", "collect_listings", "--verbose"])
+        args = parser.parse_args(["run-stage", "collect_listings", "--output-path", "runtime", "--verbose"])
 
         self.assertTrue(args.verbose)
+        self.assertEqual(args.output_path, "runtime")
 
     def test_run_stage_accepts_collect_discovery(self):
         parser = build_parser()
-        args = parser.parse_args(["run-stage", "collect_discovery"])
+        args = parser.parse_args(["run-stage", "collect_discovery", "--output-path", "runtime"])
 
         self.assertEqual(args.stage_name, "collect_discovery")
 
     def test_run_stage_accepts_collect_listings(self):
         parser = build_parser()
-        args = parser.parse_args(["run-stage", "collect_listings"])
+        args = parser.parse_args(["run-stage", "collect_listings", "--output-path", "runtime"])
 
         self.assertEqual(args.stage_name, "collect_listings")
 
     def test_run_stage_accepts_single_source_filter(self):
         parser = build_parser()
-        args = parser.parse_args(["run-stage", "collect_listings", "--sources", "lopes"])
+        args = parser.parse_args(["run-stage", "collect_listings", "--output-path", "runtime", "--sources", "lopes"])
 
         self.assertEqual(args.sources, ["lopes"])
 
     def test_run_stage_accepts_multiple_source_filters(self):
         parser = build_parser()
-        args = parser.parse_args(["run-stage", "build_daily_snapshot", "--sources", "lopes", "olx"])
+        args = parser.parse_args(["run-stage", "build_daily_snapshot", "--output-path", "runtime", "--sources", "lopes", "olx"])
 
         self.assertEqual(args.sources, ["lopes", "olx"])
 

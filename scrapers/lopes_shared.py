@@ -14,6 +14,7 @@ from curl_cffi import requests
 from scrapers.discovery_incremental import (
     build_incremental_discovery_delta,
     find_previous_output,
+    infer_output_root_from_output_path,
     infer_run_date_from_output_path,
     load_previous_lastmod_state,
 )

@@ -118,8 +118,8 @@ class CollectListingsStage(Stage):
             }
 
         input_path = Path(str(discovery_artifact["path"]))
-        output_path = Path(scraper.listings_output_path(context.run_date))
-        parquet_path = Path(scraper.listings_parquet_output_path(context.run_date))
+        output_path = context.raw_dir / scraper.source / scraper.listings_filename
+        parquet_path = output_path.with_suffix(".parquet")
         artifacts_root = Path(getattr(context, "artifacts_run_dir", Path("artifacts") / context.run_date))
         resume_paths = build_resume_paths(artifacts_root / self.name / scraper.source)
         resume_state = load_resume_state(resume_paths["state_json"])

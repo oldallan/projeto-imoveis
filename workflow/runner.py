@@ -25,11 +25,12 @@ class PipelineRunner:
         self,
         stage_name: str,
         run_date: str,
+        output_root: str | Path | None = None,
         input_manifest: str | None = None,
         verbose: bool = False,
         sources: list[str] | None = None,
     ) -> StageResult:
-        context = build_context(run_date, self.project_root)
+        context = build_context(run_date, self.project_root, output_root=output_root)
         stage = get_stage(stage_name)
         normalized_sources = normalize_selected_sources(sources)
         manifest_path = Path(input_manifest) if input_manifest else self._default_input_manifest(
@@ -46,11 +47,12 @@ class PipelineRunner:
     def run_all(
         self,
         run_date: str,
+        output_root: str | Path | None = None,
         from_stage: str | None = None,
         verbose: bool = False,
         force_discovery: bool = False,
     ) -> dict[str, object]:
-        context = build_context(run_date, self.project_root)
+        context = build_context(run_date, self.project_root, output_root=output_root)
         selected_stages = list(self._select_stages(from_stage))
         current_input_manifest: Path | None = None
         if from_stage:
