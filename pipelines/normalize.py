@@ -8,6 +8,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 import pandas as pd
 
+from pipelines.zipcode_enrichment import ZipCodeEnricher
+
 
 CANONICAL_COLUMNS = [
     "source",
@@ -46,31 +48,21 @@ CANONICAL_COLUMNS = [
     "rental_guarantee_max_brl",
     "condo_type",
     "listing_created_at",
-    "listing_updated_at",
-    "listing_status",
-    "seller_name",
-    "seller_id",
-    "seller_public_account_id",
-    "seller_type",
-    "seller_professional",
-    "advertiser_name",
-    "advertiser_id",
-    "main_image_url",
-    "gallery_urls_json",
+    "rent_listing_created_at",
+    "sale_listing_created_at",
+    "rent_last_publication_date",
+    "sale_last_publication_date",
+    "rent_listing_status",
+    "sale_listing_status",
     "amenities_json",
     "practicality_commodities_json",
     "comfort_commodities_json",
     "installations_json",
     "condominium_name",
-    "condominium_id",
     "condominium_url",
     "condominium_amenities_json",
     "features_json",
     "pois_json",
-    "nearby_places_json",
-    "house_agents_json",
-    "currency",
-    "images_count",
     "scraped_at",
 ]
 
@@ -96,14 +88,12 @@ INT_COLUMNS = [
     "tenant_service_fee_brl",
     "rental_guarantee_min_brl",
     "rental_guarantee_max_brl",
-    "images_count",
 ]
 
 BOOL_COLUMNS = [
     "furnished",
     "accepts_pets",
     "has_furniture",
-    "seller_professional",
 ]
 
 
@@ -173,16 +163,20 @@ def _pick(record: Mapping[str, Any], *keys: str) -> Any:
 
 
 def _build_listing_url(record: Mapping[str, Any], source: str) -> Any:
-    property_id = _pick(record, "property_id", "sku", "ad_id")
+    listing_url = _pick(record, "listing_url")
+    if not _is_missing(listing_url):
+        return listing_url
+
+    property_id = _pick(record, "property_id", "listing_id", "ad_id")
 
     if source == "lopes" and not _is_missing(property_id):
         return f"https://www.lopes.com.br/imovel/{property_id}"
 
-    return _pick(record, "listing_url", "url")
+    return None
 
 
 def _build_address(record: Mapping[str, Any]) -> Any:
-    return _pick(record, "address", "street")
+    return _pick(record, "street", "address")
 
 
 def _build_state(record: Mapping[str, Any]) -> Any:
@@ -346,31 +340,31 @@ def _finalize_normalized_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _normalize_record(record: Mapping[str, Any], source: str, business_type: str) -> Dict[str, Any]:
-    amenities_items = _load_amenities_items(_pick(record, "amenities_json", "amenities"))
+def _normalize_record(record: Mapping[str, Any], source: str, business_type: str | None) -> Dict[str, Any]:
+    resolved_business_type = _pick(record, "business_type") or business_type or "sale"
+    amenities_items = _load_amenities_items(_pick(record, "amenities_json"))
     sale_price = _to_int(_pick(record, "sale_price_brl"))
     rent_price = _to_int(_pick(record, "rent_price_brl"))
-    generic_price = _to_int(_pick(record, "price_value", "price"))
-    total_cost = _to_int(_pick(record, "total_cost_brl"))
-    sub_price = _pick(record, "sub_price")
-    condo_fee = _to_int(_pick(record, "condo_fee_brl", "condo_iptu_brl", "condo_fee"))
-    iptu = _to_int(_pick(record, "iptu_brl", "iptu"))
-    property_type = _pick(record, "property_type", "type")
+    generic_price = _to_int(_pick(record, "price"))
+    total_cost = _to_int(_pick(record, "total_rent_price_brl"))
+    condo_fee = _to_int(_pick(record, "condo_fee_brl"))
+    iptu = _to_int(_pick(record, "iptu_brl"))
+    property_type = _pick(record, "property_type")
     real_estate_type = _pick(record, "real_estate_type")
-    area_m2 = _to_float(_pick(record, "area_m2", "area"))
+    area_m2 = _to_float(_pick(record, "area", "area_m2"))
     total_area_m2 = _to_float(_pick(record, "total_area_m2"))
     bedrooms = _to_int(_pick(record, "bedrooms"))
     bathrooms = _to_int(_pick(record, "bathrooms"))
     parking_spots = _to_int(_pick(record, "parking_spots", "parking"))
     suites = _to_int(_pick(record, "suites"))
     floor = _to_int(_pick(record, "floor"))
-    furnished = _to_bool(_pick(record, "furnished", "is_furnished"))
+    furnished = _to_bool(_pick(record, "furnished"))
     accepts_pets = _to_bool(_pick(record, "accepts_pets"))
     has_furniture = _to_bool(_pick(record, "has_furniture"))
-
-    if source == "lopes":
-        condo_fee = _extract_labeled_money(sub_price, "Condom") or condo_fee
-        iptu = _extract_labeled_money(sub_price, "IPTU") or iptu
+    if area_m2 is None:
+        area_m2 = total_area_m2
+    if total_area_m2 is None:
+        total_area_m2 = area_m2
 
     if amenities_items:
         condo_fee = condo_fee if condo_fee is not None else _to_int(_value_from_amenities(amenities_items, "condominium", "condominio"))
@@ -392,17 +386,17 @@ def _normalize_record(record: Mapping[str, Any], source: str, business_type: str
         if accepts_pets is None and _amenities_have_label(amenities_items, "re_complex_features", "permitido animais"):
             accepts_pets = True
 
-    if business_type == "sale" and sale_price is None:
+    if resolved_business_type == "sale" and sale_price is None:
         sale_price = generic_price
-    if business_type == "rent" and rent_price is None:
+    if resolved_business_type == "rent" and rent_price is None:
         rent_price = generic_price
 
-    listing_created_at = _pick(record, "listing_created_at", "created_at")
+    listing_created_at = _pick(record, "listing_created_at")
 
     return {
         "source": source,
-        "business_type": business_type,
-        "property_id": str(_pick(record, "property_id", "sku", "ad_id") or ""),
+        "business_type": resolved_business_type,
+        "property_id": str(_pick(record, "property_id", "listing_id", "ad_id") or ""),
         "listing_url": _build_listing_url(record, source),
         "display_id": _pick(record, "display_id"),
         "description": _build_description(record),
@@ -411,9 +405,9 @@ def _normalize_record(record: Mapping[str, Any], source: str, business_type: str
         "neighbourhood": _pick(record, "neighbourhood"),
         "city": _pick(record, "city"),
         "state": _build_state(record),
-        "zip_code": _pick(record, "zip_code", "zipcode"),
+        "zip_code": _pick(record, "zipcode", "zip_code"),
         "lat": _to_float(_pick(record, "lat")),
-        "lon": _to_float(_pick(record, "lon", "lng")),
+        "lon": _to_float(_pick(record, "lon")),
         "property_type": _normalize_property_type(property_type, source=source),
         "area_m2": area_m2,
         "total_area_m2": total_area_m2,
@@ -436,50 +430,44 @@ def _normalize_record(record: Mapping[str, Any], source: str, business_type: str
         "rental_guarantee_max_brl": _to_int(_pick(record, "rental_guarantee_max_brl")),
         "condo_type": _pick(record, "condo_type"),
         "listing_created_at": listing_created_at,
-        "listing_updated_at": _pick(record, "listing_updated_at", "updated_at"),
-        "listing_status": _pick(record, "listing_status"),
-        "seller_name": _pick(record, "seller_name"),
-        "seller_id": _pick(record, "seller_id"),
-        "seller_public_account_id": _pick(record, "seller_public_account_id"),
-        "seller_type": _pick(record, "seller_type"),
-        "seller_professional": _to_bool(_pick(record, "seller_professional", "is_professional")),
-        "advertiser_name": _pick(record, "advertiser_name", "company_name"),
-        "advertiser_id": _pick(record, "advertiser_id", "company_id", "advertiser_id"),
-        "main_image_url": _pick(record, "main_image_url", "thumbnail"),
-        "gallery_urls_json": _pick(record, "gallery_urls_json", "images"),
-        "amenities_json": _pick(record, "amenities_json", "amenities"),
+        "rent_listing_created_at": _pick(record, "rent_listing_created_at"),
+        "sale_listing_created_at": _pick(record, "sale_listing_created_at"),
+        "rent_last_publication_date": _pick(record, "rent_last_publication_date"),
+        "sale_last_publication_date": _pick(record, "sale_last_publication_date"),
+        "rent_listing_status": _pick(record, "rent_listing_status"),
+        "sale_listing_status": _pick(record, "sale_listing_status"),
+        "amenities_json": _pick(record, "amenities_json"),
         "practicality_commodities_json": _pick(record, "practicality_commodities_json"),
         "comfort_commodities_json": _pick(record, "comfort_commodities_json"),
-        "installations_json": _pick(record, "installations_json", "installations"),
+        "installations_json": _pick(record, "installations_json"),
         "condominium_name": _pick(record, "condominium_name"),
-        "condominium_id": _pick(record, "condominium_id"),
         "condominium_url": _pick(record, "condominium_url"),
         "condominium_amenities_json": _pick(record, "condominium_amenities_json"),
         "features_json": _pick(record, "features_json"),
         "pois_json": _pick(record, "pois_json"),
-        "nearby_places_json": _pick(record, "nearby_places_json"),
-        "house_agents_json": _pick(record, "house_agents_json"),
-        "currency": _pick(record, "currency") or "BRL",
-        "images_count": _to_int(_pick(record, "images_count")) or 0,
         "scraped_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-def _records_to_frame(records: Iterable[Mapping[str, Any]], source: str, business_type: str) -> pd.DataFrame:
+def _records_to_frame(records: Iterable[Mapping[str, Any]], source: str, business_type: str | None) -> pd.DataFrame:
     normalized = [_normalize_record(record, source=source, business_type=business_type) for record in records]
     if not normalized:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
     return pd.DataFrame(normalized)
 
 
-def normalize_data(scraped_batches: Dict[str, List[Dict[str, Any]]]) -> pd.DataFrame:
+def normalize_data(
+    scraped_batches: Dict[str, List[Dict[str, Any]]],
+    *,
+    zip_enricher: ZipCodeEnricher | None = None,
+) -> pd.DataFrame:
     """
     Normaliza os dados vindos dos scrapers em um schema unico.
 
     Espera um dicionario no formato:
     {
-        "olx_venda": [...],
-        "quinto_venda": [...],
+        "olx_listings": [...],
+        "quinto_listings": [...],
     }
     """
     frames: List[pd.DataFrame] = []
@@ -490,25 +478,41 @@ def normalize_data(scraped_batches: Dict[str, List[Dict[str, Any]]]) -> pd.DataF
 
         batch_lower = batch_name.lower()
         source = batch_lower.split("_", 1)[0]
-        business_type = "rent" if "aluguel" in batch_lower else "sale"
+        if "aluguel" in batch_lower:
+            business_type = "rent"
+        elif "venda" in batch_lower:
+            business_type = "sale"
+        else:
+            business_type = None
         frames.append(_records_to_frame(records, source=source, business_type=business_type))
 
     if not frames:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
 
     df = pd.concat(frames, ignore_index=True)
+    if zip_enricher is not None:
+        df = zip_enricher.enrich_frame(df)
 
     return _finalize_normalized_frame(df)
 
 
-def _infer_source_and_business(file_path: Path) -> tuple[str, str]:
+def _infer_source_and_business(file_path: Path) -> tuple[str, str | None]:
     stem = file_path.stem.lower()
     source = stem.split("_", 1)[0]
-    business_type = "rent" if "aluguel" in stem else "sale"
+    if "aluguel" in stem:
+        business_type = "rent"
+    elif "venda" in stem:
+        business_type = "sale"
+    else:
+        business_type = None
     return source, business_type
 
 
-def load_and_normalize(files: List[str]) -> pd.DataFrame:
+def load_and_normalize(
+    files: List[str],
+    *,
+    zip_enricher: ZipCodeEnricher | None = None,
+) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
 
     for file_name in files:
@@ -518,7 +522,10 @@ def load_and_normalize(files: List[str]) -> pd.DataFrame:
             continue
 
         try:
-            raw_df = pd.read_csv(file_path)
+            if file_path.suffix.lower() == ".parquet":
+                raw_df = pd.read_parquet(file_path)
+            else:
+                raw_df = pd.read_csv(file_path)
         except Exception as exc:
             print(f"[WARN] falha ao ler {file_path}: {exc}")
             continue
@@ -537,4 +544,6 @@ def load_and_normalize(files: List[str]) -> pd.DataFrame:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
 
     df = pd.concat(frames, ignore_index=True)
+    if zip_enricher is not None:
+        df = zip_enricher.enrich_frame(df)
     return _finalize_normalized_frame(df)

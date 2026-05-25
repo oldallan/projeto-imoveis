@@ -6,6 +6,7 @@ import pandas as pd
 
 from pipelines.historical_store import HISTORY_COLUMNS, UPSERT_KEY_COLUMNS, update_historical_store
 from workflow.models import ArtifactRecord, StageResult, ValidationResult
+from workflow.paths import build_scoped_output_dir, build_source_scope_token, normalize_selected_sources
 from workflow.stages import Stage
 
 
@@ -15,7 +16,7 @@ class UpdateHistoricalStoreStage(Stage):
     inputs = ["build_daily_snapshot manifest"]
     block_on_failure = True
 
-    def run(self, context, input_manifest, logger):
+    def run(self, context, input_manifest, logger, stage_options=None):
         if not input_manifest:
             raise ValueError("manifesto da fase anterior e obrigatorio")
         if input_manifest.get("status") != "success":
@@ -31,14 +32,27 @@ class UpdateHistoricalStoreStage(Stage):
         if missing:
             raise ValueError(f"artefatos obrigatorios ausentes no manifesto diario: {missing}")
 
+        selected_sources = normalize_selected_sources((stage_options or {}).get("sources"))
+        scope_token = build_source_scope_token(selected_sources)
         snapshot_listings = pd.read_parquet(artifact_map["daily_listings"]["path"])
         pd.read_parquet(artifact_map["daily_properties"]["path"])
         pd.read_parquet(artifact_map["daily_property_listing_link"]["path"])
+        if selected_sources:
+            snapshot_listings = snapshot_listings[snapshot_listings["source"].isin(selected_sources)].copy()
+            if snapshot_listings.empty:
+                raise ValueError(f"nenhum registro encontrado para fontes solicitadas: {selected_sources}")
 
-        output = update_historical_store(snapshot_listings, context.processed_dir)
+        processed_dir = build_scoped_output_dir(context.processed_dir, selected_sources)
+        output = update_historical_store(snapshot_listings, processed_dir)
         listings_df = output["listings"]
         properties_df = output["properties"]
         links_df = output["links"]
+        scope_metadata = {}
+        if selected_sources:
+            scope_metadata = {
+                "source_scope": scope_token,
+                "sources": selected_sources,
+            }
 
         artifacts = [
             ArtifactRecord(
@@ -46,31 +60,37 @@ class UpdateHistoricalStoreStage(Stage):
                 path=str(output["paths"]["listings"].resolve()),
                 format="parquet",
                 rows=len(listings_df),
+                metadata=dict(scope_metadata),
             ),
             ArtifactRecord(
                 name="historical_properties_latest",
                 path=str(output["paths"]["properties"].resolve()),
                 format="parquet",
                 rows=len(properties_df),
+                metadata=dict(scope_metadata),
             ),
             ArtifactRecord(
                 name="historical_property_listing_link_latest",
                 path=str(output["paths"]["links"].resolve()),
                 format="parquet",
                 rows=len(links_df),
+                metadata=dict(scope_metadata),
             ),
         ]
         metrics = {
             "incoming_snapshot_count": len(snapshot_listings),
             "inserted_count": output["inserted_count"],
             "updated_count": output["updated_count"],
+            "selected_sources": selected_sources,
+            "source_scope": scope_token,
+            "output_dir": str(processed_dir.resolve()),
             "historical_listings_count": len(listings_df),
             "historical_properties_count": len(properties_df),
             "historical_links_count": len(links_df),
         }
         return artifacts, metrics, []
 
-    def validate(self, context, input_manifest, result: StageResult, logger):
+    def validate(self, context, input_manifest, result: StageResult, logger, stage_options=None):
         validations: list[ValidationResult] = []
         artifact_map = {artifact.name: artifact for artifact in result.artifacts}
         listings_artifact = artifact_map.get("historical_listings_latest")

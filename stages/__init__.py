@@ -1,17 +1,20 @@
-﻿from stages.build_daily_snapshot import BuildDailySnapshotStage
-from stages.collect_general_listings import CollectGeneralListingsStage
+from stages.collect_discovery import CollectDiscoveryStage
+from stages.build_daily_snapshot import BuildDailySnapshotStage
+from stages.collect_listings import CollectListingsStage
 from stages.update_historical_store import UpdateHistoricalStoreStage
 
 
 STAGE_SEQUENCE = [
-    "collect_general_listings",
+    "collect_discovery",
+    "collect_listings",
     "build_daily_snapshot",
     "update_historical_store",
 ]
 
 
 _STAGES = {
-    "collect_general_listings": CollectGeneralListingsStage(),
+    "collect_discovery": CollectDiscoveryStage(),
+    "collect_listings": CollectListingsStage(),
     "build_daily_snapshot": BuildDailySnapshotStage(),
     "update_historical_store": UpdateHistoricalStoreStage(),
 }

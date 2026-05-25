@@ -3,6 +3,15 @@ from __future__ import annotations
 import pandas as pd
 
 
+def _business_type_has_context(values: pd.Series, context: str) -> bool:
+    normalized = values.fillna("").astype("string").str.strip().str.lower()
+    if context == "sale":
+        return normalized.isin(["sale", "rent|sale"]).any()
+    if context == "rent":
+        return normalized.isin(["rent", "rent|sale"]).any()
+    return False
+
+
 def _listing_key(df: pd.DataFrame) -> pd.Series:
     return (
         df["source"].fillna("")
@@ -35,11 +44,25 @@ def _build_canonical_property_id(df: pd.DataFrame) -> pd.Series:
     city = df["city"].fillna("").astype("string").str.strip().str.lower()
     neighbourhood = df["neighbourhood"].fillna("").astype("string").str.strip().str.lower()
     address = df["address"].fillna("").astype("string").str.strip().str.lower()
-    area = df["area_m2"].fillna(0).round(0).astype("Int64").astype("string")
-    bedrooms = df["bedrooms"].fillna(0).astype("Int64").astype("string")
-    bathrooms = df["bathrooms"].fillna(0).astype("Int64").astype("string")
+    area_numeric = pd.to_numeric(df["area_m2"], errors="coerce")
+    bedrooms_numeric = pd.to_numeric(df["bedrooms"], errors="coerce")
+    bathrooms_numeric = pd.to_numeric(df["bathrooms"], errors="coerce")
+    area = area_numeric.fillna(0).round(0).astype("Int64").astype("string")
+    bedrooms = bedrooms_numeric.fillna(0).astype("Int64").astype("string")
+    bathrooms = bathrooms_numeric.fillna(0).astype("Int64").astype("string")
 
-    return city + "|" + neighbourhood + "|" + address + "|" + area + "|" + bedrooms + "|" + bathrooms
+    canonical_id = city + "|" + neighbourhood + "|" + address + "|" + area + "|" + bedrooms + "|" + bathrooms
+    has_location_identity = city.ne("") | neighbourhood.ne("") | address.ne("")
+    has_shape_identity = area_numeric.fillna(0).gt(0) | bedrooms_numeric.fillna(0).gt(0) | bathrooms_numeric.fillna(0).gt(0)
+
+    source = df["source"].fillna("").astype("string").str.strip().str.lower()
+    property_id = df["property_id"].fillna("").astype("string").str.strip()
+    listing_url = df["listing_url"].fillna("").astype("string").str.strip()
+    fallback_identity = (
+        (source + "|" + property_id).where(property_id.ne(""), source + "|" + listing_url)
+    )
+
+    return canonical_id.where(has_location_identity | has_shape_identity, fallback_identity)
 
 
 def _listing_mode_from_flags(is_for_sale: bool, is_for_rent: bool) -> str:
@@ -55,12 +78,19 @@ def _has_positive_price(series: pd.Series) -> pd.Series:
     return numeric.fillna(0).gt(0)
 
 
+def _first_non_null(series: pd.Series):
+    non_null = series.dropna()
+    if non_null.empty:
+        return pd.NA
+    return non_null.iloc[0]
+
+
 def _build_canonical_availability(deduped: pd.DataFrame) -> pd.DataFrame:
     availability = (
         deduped.groupby("canonical_property_id")["business_type"]
         .agg(
-            has_sale_by_canonical=lambda values: values.fillna("").eq("sale").any(),
-            has_rent_by_canonical=lambda values: values.fillna("").eq("rent").any(),
+            has_sale_by_canonical=lambda values: _business_type_has_context(values, "sale"),
+            has_rent_by_canonical=lambda values: _business_type_has_context(values, "rent"),
         )
         .reset_index()
     )
@@ -73,8 +103,8 @@ def _build_property_id_availability(deduped: pd.DataFrame) -> pd.DataFrame:
         deduped.loc[valid_property_id]
         .groupby(["source", "property_id"])["business_type"]
         .agg(
-            has_sale_by_property_id=lambda values: values.fillna("").eq("sale").any(),
-            has_rent_by_property_id=lambda values: values.fillna("").eq("rent").any(),
+            has_sale_by_property_id=lambda values: _business_type_has_context(values, "sale"),
+            has_rent_by_property_id=lambda values: _business_type_has_context(values, "rent"),
         )
         .reset_index()
     )
@@ -157,9 +187,10 @@ def build_unified_tables(listings_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
             furnished=("furnished", "max"),
             accepts_pets=("accepts_pets", "max"),
             condominium_name=("condominium_name", "first"),
-            condominium_id=("condominium_id", "first"),
             amenities_json=("amenities_json", "first"),
             installations_json=("installations_json", "first"),
+            sale_price_brl=("sale_price_brl", _first_non_null),
+            rent_price_brl=("rent_price_brl", _first_non_null),
             first_seen_at=("scraped_at", "min"),
             last_seen_at=("scraped_at", "max"),
             listings_count=("property_id", "count"),

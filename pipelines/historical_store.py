@@ -11,7 +11,7 @@ from pipelines.daily_snapshot import (
     LISTINGS_FILENAME,
     PROPERTIES_FILENAME,
     PROPERTIES_CSV_FILENAME,
-    enrich_listings_with_canonical_id,
+    attach_canonical_id,
     project_listings_output_columns,
 )
 from pipelines.dedupe import build_unified_tables
@@ -117,7 +117,7 @@ def update_historical_store(snapshot_listings: pd.DataFrame, processed_dir: Path
     )
 
     accumulated_properties, accumulated_links = build_unified_tables(accumulated_base)
-    accumulated_listings = enrich_listings_with_canonical_id(
+    accumulated_listings = attach_canonical_id(
         accumulated_base,
         accumulated_links,
         accumulated_properties,

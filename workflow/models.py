@@ -41,6 +41,7 @@ class StageResult:
     log_path: str | None = None
     artifacts: list[ArtifactRecord] = field(default_factory=list)
     metrics: dict[str, Any] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict)
     validations: list[ValidationResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     blocked: bool = False
@@ -57,6 +58,7 @@ class StageResult:
             "log_path": self.log_path,
             "artifacts": [artifact.to_dict() for artifact in self.artifacts],
             "metrics": self.metrics,
+            "options": self.options,
             "validations": [validation.to_dict() for validation in self.validations],
             "errors": self.errors,
             "blocked": self.blocked,

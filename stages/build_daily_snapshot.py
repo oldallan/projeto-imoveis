@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -7,30 +7,40 @@ import pandas as pd
 from pipelines.daily_snapshot import LISTINGS_EXCLUDED_OUTPUT_COLUMNS, build_daily_snapshot
 from pipelines.normalize import CANONICAL_COLUMNS
 from workflow.models import ArtifactRecord, StageResult, ValidationResult
+from workflow.paths import build_scoped_output_dir, build_source_scope_token, normalize_selected_sources
 from workflow.stages import Stage
 
 
 class BuildDailySnapshotStage(Stage):
     name = "build_daily_snapshot"
     objective = "Transformar a coleta bruta do dia em um snapshot diario consolidado."
-    inputs = ["collect_general_listings manifest"]
+    inputs = ["collect_listings manifest"]
     block_on_failure = True
 
-    def run(self, context, input_manifest, logger):
+    def run(self, context, input_manifest, logger, stage_options=None):
         if not input_manifest:
             raise ValueError("manifesto da fase anterior e obrigatorio")
         if input_manifest.get("status") != "success":
-            raise ValueError("o manifesto de coleta precisa estar validado com status success")
+            raise ValueError("o manifesto de entrada precisa estar validado com status success")
 
-        raw_files = [artifact["path"] for artifact in input_manifest.get("artifacts", []) if artifact.get("format") == "csv"]
+        selected_sources = normalize_selected_sources((stage_options or {}).get("sources"))
+        scope_token = build_source_scope_token(selected_sources)
+        raw_files, manifest_source = self._resolve_snapshot_inputs(input_manifest, selected_sources=selected_sources)
         if not raw_files:
-            raise ValueError("nenhum arquivo CSV encontrado no manifesto de coleta")
+            raise ValueError("nenhum arquivo CSV encontrado no manifesto de entrada")
 
-        snapshot = build_daily_snapshot(raw_files, context.processed_run_dir)
+        output_dir = build_scoped_output_dir(context.processed_run_dir, selected_sources)
+        snapshot = build_daily_snapshot(raw_files, output_dir)
         listings_df = snapshot["listings"]
         properties_df = snapshot["properties"]
         links_df = snapshot["links"]
         paths = snapshot["paths"]
+        scope_metadata = {}
+        if selected_sources:
+            scope_metadata = {
+                "source_scope": scope_token,
+                "sources": selected_sources,
+            }
 
         artifacts = [
             ArtifactRecord(
@@ -38,18 +48,21 @@ class BuildDailySnapshotStage(Stage):
                 path=str(paths["listings"].resolve()),
                 format="parquet",
                 rows=len(listings_df),
+                metadata=dict(scope_metadata),
             ),
             ArtifactRecord(
                 name="daily_properties",
                 path=str(paths["properties"].resolve()),
                 format="parquet",
                 rows=len(properties_df),
+                metadata=dict(scope_metadata),
             ),
             ArtifactRecord(
                 name="daily_property_listing_link",
                 path=str(paths["links"].resolve()),
                 format="parquet",
                 rows=len(links_df),
+                metadata=dict(scope_metadata),
             ),
             ArtifactRecord(
                 name="daily_listings_csv",
@@ -57,19 +70,41 @@ class BuildDailySnapshotStage(Stage):
                 format="csv",
                 required=False,
                 rows=len(listings_df),
+                metadata=dict(scope_metadata),
             ),
         ]
 
         metrics = {
             "input_files": raw_files,
             "input_file_count": len(raw_files),
+            "input_manifest_source": manifest_source,
+            "selected_sources": selected_sources,
+            "source_scope": scope_token,
+            "output_dir": str(output_dir.resolve()),
             "daily_listings_count": len(listings_df),
             "daily_properties_count": len(properties_df),
             "daily_links_count": len(links_df),
         }
+        metrics.update(snapshot.get("metrics", {}))
         return artifacts, metrics, []
 
-    def validate(self, context, input_manifest, result: StageResult, logger):
+    def _resolve_snapshot_inputs(self, input_manifest, selected_sources: list[str] | None = None):
+        input_stage = input_manifest.get("stage_name")
+        if input_stage != "collect_listings":
+            raise ValueError("o build_daily_snapshot exige manifesto da etapa collect_listings")
+        raw_files = [
+            artifact["path"]
+            for artifact in input_manifest.get("artifacts", [])
+            if artifact.get("format") == "csv"
+            and artifact.get("metadata", {}).get("artifact_role") == "listings"
+            and (
+                not selected_sources
+                or artifact.get("metadata", {}).get("source") in set(selected_sources)
+            )
+        ]
+        return raw_files, "collect_listings"
+
+    def validate(self, context, input_manifest, result: StageResult, logger, stage_options=None):
         validations: list[ValidationResult] = []
         artifact_map = {artifact.name: artifact for artifact in result.artifacts}
         listings_artifact = artifact_map.get("daily_listings")

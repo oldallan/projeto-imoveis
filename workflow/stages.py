@@ -28,6 +28,7 @@ class Stage(ABC):
         context,
         input_manifest: dict[str, Any] | None,
         logger,
+        stage_options: dict[str, Any] | None = None,
     ) -> tuple[list, dict[str, Any], list[str]]:
         raise NotImplementedError
 
@@ -38,12 +39,19 @@ class Stage(ABC):
         input_manifest: dict[str, Any] | None,
         result: StageResult,
         logger,
+        stage_options: dict[str, Any] | None = None,
     ) -> list[ValidationResult]:
         raise NotImplementedError
 
-    def execute(self, context, input_manifest_path: Path | None = None) -> StageResult:
-        logger, log_path = build_stage_logger(context, self.name)
-        manifest_path = stage_manifest_path(context, self.name)
+    def execute(
+        self,
+        context,
+        input_manifest_path: Path | None = None,
+        stage_options: dict[str, Any] | None = None,
+    ) -> StageResult:
+        selected_sources = (stage_options or {}).get("sources")
+        logger, log_path = build_stage_logger(context, self.name, sources=selected_sources)
+        manifest_path = stage_manifest_path(context, self.name, sources=selected_sources)
         result = StageResult(
             stage_name=self.name,
             status="running",
@@ -52,6 +60,7 @@ class Stage(ABC):
             input_manifest=str(input_manifest_path) if input_manifest_path else None,
             output_manifest=str(manifest_path),
             log_path=str(log_path),
+            options=stage_options or {},
         )
 
         input_manifest = read_json(input_manifest_path) if input_manifest_path else None
@@ -63,7 +72,7 @@ class Stage(ABC):
             stdout_writer = LoggerWriter(logger, level=20)
             stderr_writer = LoggerWriter(logger, level=40)
             with redirect_stdout(stdout_writer), redirect_stderr(stderr_writer):
-                artifacts, metrics, errors = self.run(context, input_manifest, logger)
+                artifacts, metrics, errors = self.run(context, input_manifest, logger, stage_options=stage_options)
             stdout_writer.flush()
             stderr_writer.flush()
             result.artifacts = artifacts
@@ -73,7 +82,7 @@ class Stage(ABC):
             logger.exception("stage_exception stage=%s", self.name)
             result.errors.append(str(exc))
 
-        result.validations = self.validate(context, input_manifest, result, logger)
+        result.validations = self.validate(context, input_manifest, result, logger, stage_options=stage_options)
         failed_validations = [
             validation
             for validation in result.validations

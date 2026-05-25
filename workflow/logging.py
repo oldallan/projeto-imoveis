@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from workflow.models import PipelineContext
+from workflow.paths import build_source_scope_token
 
 
 class LoggerWriter:
@@ -31,11 +32,19 @@ class LoggerWriter:
         self._buffer = ""
 
 
-def build_stage_logger(context: PipelineContext, stage_name: str) -> tuple[logging.Logger, Path]:
-    log_path = context.logs_run_dir / f"{stage_name}.log"
+def build_stage_logger(
+    context: PipelineContext,
+    stage_name: str,
+    sources: list[str] | tuple[str, ...] | None = None,
+) -> tuple[logging.Logger, Path]:
+    scope_token = build_source_scope_token(sources)
+    log_filename = f"{stage_name}.log" if not scope_token else f"{stage_name}__sources__{scope_token}.log"
+    log_path = context.logs_run_dir / log_filename
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger_name = f"pipeline.{context.run_date}.{stage_name}"
+    if scope_token:
+        logger_name = f"{logger_name}.sources.{scope_token}"
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
     logger.propagate = False

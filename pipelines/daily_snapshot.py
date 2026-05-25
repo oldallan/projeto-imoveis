@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,7 @@ import pandas as pd
 
 from pipelines.dedupe import build_unified_tables, deduplicate_data
 from pipelines.normalize import load_and_normalize
+from pipelines.zipcode_enrichment import ZipCodeEnricher, default_cache_path_from_output_dir
 
 
 LISTINGS_FILENAME = "listings_unificados.parquet"
@@ -28,7 +30,7 @@ def project_listings_output_columns(listings_df: pd.DataFrame) -> pd.DataFrame:
     return listings_df.drop(columns=excluded)
 
 
-def enrich_listings_with_canonical_id(
+def attach_canonical_id(
     listings_df: pd.DataFrame,
     link_df: pd.DataFrame,
     properties_df: pd.DataFrame | None = None,
@@ -58,6 +60,8 @@ def enrich_listings_with_canonical_id(
 
     property_fields = [
         "canonical_property_id",
+        "sale_price_brl",
+        "rent_price_brl",
         "is_for_sale",
         "is_for_rent",
         "listing_mode",
@@ -83,10 +87,11 @@ def enrich_listings_with_canonical_id(
 def build_daily_snapshot(files: list[str], output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    normalized_df = load_and_normalize(files)
+    zip_enricher = ZipCodeEnricher(cache_path=default_cache_path_from_output_dir(output_dir))
+    normalized_df = load_and_normalize(files, zip_enricher=zip_enricher)
     listings_df = deduplicate_data(normalized_df)
     properties_df, link_df = build_unified_tables(listings_df)
-    listings_with_canonical = enrich_listings_with_canonical_id(listings_df, link_df, properties_df)
+    listings_with_canonical = attach_canonical_id(listings_df, link_df, properties_df)
     listings_output = project_listings_output_columns(listings_with_canonical)
 
     listings_path = output_dir / LISTINGS_FILENAME
@@ -101,10 +106,16 @@ def build_daily_snapshot(files: list[str], output_dir: Path) -> dict[str, Any]:
     properties_df.to_csv(properties_csv_path, index=False, encoding="utf-8-sig")
     link_df.to_parquet(links_path, index=False)
 
+    print(
+        "[INFO] zipcode_enrichment_metrics="
+        + json.dumps(zip_enricher.last_metrics, ensure_ascii=False)
+    )
+
     return {
         "listings": listings_output,
         "properties": properties_df,
         "links": link_df,
+        "metrics": dict(zip_enricher.last_metrics),
         "paths": {
             "listings": listings_path,
             "listings_csv": listings_csv_path,
