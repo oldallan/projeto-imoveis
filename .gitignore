@@ -6,7 +6,12 @@ __pycache__/
 .env
 .vscode/
 logs/
-raw/**/*.csv
-processed/*.csv
-processed/*/*.parquet
-processed/*/*.csv
+
+# Local/generated data
+raw/
+artifacts/
+processed/
+
+# Runtime/debug outputs
+*.log
+.pytest_cache/
