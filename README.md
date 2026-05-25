@@ -90,53 +90,62 @@ environment.
 List available stages:
 
 ```sh
-python cli.py list-stages
+python imoveis_pipeline.py list-stages
 ```
 
 Run the full pipeline for the current day:
 
 ```sh
-python cli.py run-all --output-path .
+python imoveis_pipeline.py run-all --output-path .
+```
+
+Run continuously once per day. The first run starts immediately; the next runs
+are scheduled at a random local time inside the daily start window. If no window
+is provided, the default is `09:00-15:00`.
+
+```sh
+python imoveis_pipeline.py run-all --output-path /dados/projeto-imoveis --daily
+python imoveis_pipeline.py run-all --output-path /dados/projeto-imoveis --daily --start-window 10:00-16:00
 ```
 
 Run the full pipeline for a specific date:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY
 ```
 
 Run with more detailed scraper logs:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --verbose
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --verbose
 ```
 
 Force a new discovery even when a successful manifest already exists:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --force-discovery
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --force-discovery
 ```
 
 Resume the pipeline from a specific stage:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --from-stage collect_listings
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --from-stage collect_listings
 ```
 
 Run a single stage:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY
-python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY
-python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage update_historical_store --output-path . --date DD-MM-YYYY
 ```
 
 Limit a single stage to specific sources:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx lopes
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx lopes
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx lopes
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx lopes
 ```
 
 When `--sources` is used, scoped manifests and outputs may be written under
@@ -205,10 +214,10 @@ While the first Lopes and QuintoAndar collections are still running, it is
 recommended to run OLX separately with `--sources`:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage update_historical_store --output-path . --date DD-MM-YYYY --sources olx
 ```
 
 After Lopes and QuintoAndar complete their first collection, the pipeline can be
@@ -280,8 +289,8 @@ python -m pytest
 ## Repository Structure
 
 ```text
-cli.py                    Main pipeline CLI
-main_pipeline.py           Shortcut for `python cli.py run-all --output-path .`
+imoveis_pipeline.py       Main pipeline CLI
+main_pipeline.py           Shortcut for `python imoveis_pipeline.py run-all --output-path .`
 parquet_to_csv.py          Parquet -> CSV exporter
 workaround_quinto_missing.py
 pipelines/                 Normalization, dedupe, snapshot, historical store, and ZIP code enrichment

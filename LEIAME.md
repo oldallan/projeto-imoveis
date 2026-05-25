@@ -91,53 +91,62 @@ persistente em ambiente remoto.
 Listar stages disponiveis:
 
 ```sh
-python cli.py list-stages
+python imoveis_pipeline.py list-stages
 ```
 
 Rodar o pipeline completo para o dia atual:
 
 ```sh
-python cli.py run-all --output-path .
+python imoveis_pipeline.py run-all --output-path .
+```
+
+Rodar continuamente uma vez por dia. A primeira execucao comeca imediatamente;
+as seguintes sao agendadas em um horario local aleatorio dentro da janela diaria
+de inicio. Se nenhuma janela for informada, o default e `09:00-15:00`.
+
+```sh
+python imoveis_pipeline.py run-all --output-path /dados/projeto-imoveis --daily
+python imoveis_pipeline.py run-all --output-path /dados/projeto-imoveis --daily --start-window 10:00-16:00
 ```
 
 Rodar o pipeline completo para uma data:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY
 ```
 
 Rodar com logs mais detalhados dos scrapers:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --verbose
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --verbose
 ```
 
 Forcar novo discovery mesmo quando ja existe manifesto de sucesso:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --force-discovery
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --force-discovery
 ```
 
 Retomar o pipeline a partir de uma etapa:
 
 ```sh
-python cli.py run-all --output-path . --date DD-MM-YYYY --from-stage collect_listings
+python imoveis_pipeline.py run-all --output-path . --date DD-MM-YYYY --from-stage collect_listings
 ```
 
 Executar uma etapa isolada:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY
-python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY
-python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY
+python imoveis_pipeline.py run-stage update_historical_store --output-path . --date DD-MM-YYYY
 ```
 
 Limitar uma etapa isolada a fontes especificas:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx lopes
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx lopes
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx lopes
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx lopes
 ```
 
 Quando `--sources` e usado, manifests e outputs escopados podem ficar em
@@ -206,10 +215,10 @@ Enquanto a primeira coleta de Lopes e QuintoAndar ainda estiver em andamento,
 recomenda-se rodar a OLX separadamente com `--sources`:
 
 ```sh
-python cli.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY --sources olx
-python cli.py run-stage update_historical_store --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage collect_discovery --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage collect_listings --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage build_daily_snapshot --output-path . --date DD-MM-YYYY --sources olx
+python imoveis_pipeline.py run-stage update_historical_store --output-path . --date DD-MM-YYYY --sources olx
 ```
 
 Depois que Lopes e QuintoAndar concluirem a primeira coleta, o pipeline pode
@@ -280,8 +289,8 @@ python -m pytest
 ## Estrutura do Repositorio
 
 ```text
-cli.py                    CLI principal do pipeline
-main_pipeline.py           Atalho para `python cli.py run-all --output-path .`
+imoveis_pipeline.py       CLI principal do pipeline
+main_pipeline.py           Atalho para `python imoveis_pipeline.py run-all --output-path .`
 parquet_to_csv.py          Exportador Parquet -> CSV
 workaround_quinto_missing.py
 pipelines/                 Normalizacao, dedupe, snapshot, historico e CEP

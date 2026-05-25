@@ -5,6 +5,7 @@ import json
 import shutil
 import time
 import unittest
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +13,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from cli import build_parser
+from imoveis_pipeline import DailyStartWindow, build_parser, next_daily_start, parse_start_window
 from pipelines.daily_snapshot import attach_canonical_id, build_daily_snapshot, project_listings_output_columns
 from pipelines.historical_store import update_historical_store
 from scrapers.http_metrics import init_metrics, record_request
@@ -1626,6 +1627,49 @@ class CliParserTests(unittest.TestCase):
 
         self.assertTrue(args.force_discovery)
 
+    def test_run_all_without_daily_runs_once(self):
+        parser = build_parser()
+        args = parser.parse_args(["run-all", "--output-path", "runtime"])
+
+        self.assertFalse(args.daily)
+        self.assertIsNone(args.start_window)
+        self.assertIsNone(args.date)
+
+    def test_run_all_daily_uses_default_start_window(self):
+        parser = build_parser()
+        args = parser.parse_args(["run-all", "--output-path", "runtime", "--daily"])
+
+        self.assertTrue(args.daily)
+        self.assertEqual(args.start_window.raw, "09:00-15:00")
+        self.assertEqual(args.start_window.start_minute, 9 * 60)
+        self.assertEqual(args.start_window.end_minute, 15 * 60)
+
+    def test_run_all_daily_accepts_custom_start_window(self):
+        parser = build_parser()
+        args = parser.parse_args(["run-all", "--output-path", "runtime", "--daily", "--start-window", "10:00-16:00"])
+
+        self.assertEqual(args.start_window.raw, "10:00-16:00")
+        self.assertEqual(args.start_window.start_minute, 10 * 60)
+        self.assertEqual(args.start_window.end_minute, 16 * 60)
+
+    def test_run_all_daily_rejects_date(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run-all", "--output-path", "runtime", "--daily", "--date", "07-04-2026"])
+
+    def test_run_all_rejects_start_window_without_daily(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run-all", "--output-path", "runtime", "--start-window", "10:00-16:00"])
+
+    def test_run_stage_rejects_daily(self):
+        parser = build_parser()
+
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run-stage", "collect_listings", "--output-path", "runtime", "--daily"])
+
     def test_run_stage_accepts_verbose(self):
         parser = build_parser()
         args = parser.parse_args(["run-stage", "collect_listings", "--output-path", "runtime", "--verbose"])
@@ -1656,6 +1700,29 @@ class CliParserTests(unittest.TestCase):
         args = parser.parse_args(["run-stage", "build_daily_snapshot", "--output-path", "runtime", "--sources", "lopes", "olx"])
 
         self.assertEqual(args.sources, ["lopes", "olx"])
+
+
+class DailySchedulerTests(unittest.TestCase):
+    def test_parse_start_window_accepts_strict_window(self):
+        window = parse_start_window("10:30-16:45")
+
+        self.assertEqual(window, DailyStartWindow(raw="10:30-16:45", start_minute=630, end_minute=1005))
+
+    def test_parse_start_window_rejects_invalid_format(self):
+        with self.assertRaises(Exception):
+            parse_start_window("10-16")
+
+    def test_parse_start_window_rejects_inverted_window(self):
+        with self.assertRaises(Exception):
+            parse_start_window("16:00-10:00")
+
+    def test_next_daily_start_uses_tomorrow_inside_window(self):
+        window = parse_start_window("10:00-16:00")
+
+        with patch("imoveis_pipeline.random.randint", return_value=13 * 60 + 15):
+            next_start = next_daily_start(datetime(2026, 5, 25, 18, 30), window)
+
+        self.assertEqual(next_start, datetime(2026, 5, 26, 13, 15))
 
 
 if __name__ == "__main__":
