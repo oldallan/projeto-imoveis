@@ -36,7 +36,10 @@ from scrapers.olx_shared import (
 from scrapers.scrapy_support import CurlCffiDownloadHandler
 
 
-def make_listing_html(cards: list[dict[str, object]]) -> str:
+def make_listing_html(
+    cards: list[dict[str, object]],
+    container_class: str = "AdListing_adListContainer__ALQla",
+) -> str:
     parts: list[str] = []
     for card in cards:
         title = card.get("title", "Sem titulo")
@@ -62,7 +65,7 @@ def make_listing_html(cards: list[dict[str, object]]) -> str:
             </div>
             """
         )
-    return '<html><body><div class="AdListing_adListContainer__ALQla">' + "".join(parts) + "</div></body></html>"
+    return f'<html><body><div class="{container_class}">' + "".join(parts) + "</div></body></html>"
 
 
 class OlxDiscoveryTests(unittest.TestCase):
@@ -137,6 +140,34 @@ class OlxDiscoveryTests(unittest.TestCase):
                     "raw_card_date_text": "Ontem, 23:33",
                     "title": "Imovel 2",
                 },
+            ],
+        )
+
+    def test_parse_listing_page_accepts_current_modular_container_class(self):
+        html = make_listing_html(
+            [
+                {
+                    "href": "https://sp.olx.com.br/sao-paulo-e-regiao/imoveis/imovel-atual-1234567",
+                    "title": "Imovel atual",
+                    "price_text": "R$ 450.000",
+                    "date_text": "Hoje, 14:30",
+                }
+            ],
+            container_class="AdListing-module-scss-module__r0kIAG__adListContainer",
+        )
+
+        parsed = parse_listing_page(html, "30-07-2026")
+
+        self.assertEqual(
+            parsed,
+            [
+                {
+                    "listing_url": "https://sp.olx.com.br/sao-paulo-e-regiao/imoveis/imovel-atual-1234567",
+                    "price_brl": 450000,
+                    "listing_posted_at": "2026-07-30T14:30:00-03:00",
+                    "raw_card_date_text": "Hoje, 14:30",
+                    "title": "Imovel atual",
+                }
             ],
         )
 

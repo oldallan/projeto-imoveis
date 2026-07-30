@@ -393,7 +393,7 @@ def _extract_listing_href(anchor_selector: Selector) -> str | None:
 
 
 def _find_listing_container(selector: Selector) -> Selector | None:
-    containers = selector.css('div[class*="AdListing_adListContainer"]')
+    containers = selector.css('div[class*="adListContainer"]')
     if not containers:
         return None
     return containers[0]
