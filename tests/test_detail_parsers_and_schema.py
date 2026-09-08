@@ -50,6 +50,8 @@ from scrapers.quinto_discovery import (
     parse_sitemap_index as parse_quinto_sitemap_index,
 )
 from scrapers.quinto_listings import (
+    MissingInitialStateError,
+    MissingNextDataError,
     QuintoListingsSpider,
     build_scrapy_settings as build_quinto_listings_scrapy_settings,
     collect_listings_from_file as collect_quinto_listings_from_file,
@@ -64,6 +66,34 @@ from scrapers.quinto_shared import (
 
 
 class ListingParserTests(unittest.TestCase):
+    def test_quinto_missing_next_data_raises_specific_error(self):
+        with self.assertRaises(MissingNextDataError):
+            parse_quinto_listing_page_html(
+                "<html><body>temporarily unavailable</body></html>",
+                business_type="sale",
+                fallback_url="https://www.quintoandar.com.br/imovel/123/comprar",
+            )
+
+    def test_quinto_missing_initial_state_raises_specific_error(self):
+        page_props_variants = [
+            {},
+            {"initialState": None},
+            {"initialState": []},
+        ]
+        for page_props in page_props_variants:
+            with self.subTest(page_props=page_props):
+                html = (
+                    '<script id="__NEXT_DATA__" type="application/json">'
+                    + json.dumps({"props": {"pageProps": page_props}})
+                    + "</script>"
+                )
+                with self.assertRaises(MissingInitialStateError):
+                    parse_quinto_listing_page_html(
+                        html,
+                        business_type="sale",
+                        fallback_url="https://www.quintoandar.com.br/imovel/123/comprar",
+                    )
+
     def test_incremental_discovery_uses_inferred_watermark_overlap_window(self):
         previous_state = IncrementalDiscoveryState(
             lastmod_by_url={
@@ -1637,6 +1667,336 @@ class ListingParserTests(unittest.TestCase):
 
         self.assertEqual(processed[0]["status"], "not_found")
         self.assertEqual(processed[0]["key"], "id:404")
+
+    def test_quinto_missing_next_data_retries_twice_then_becomes_terminal(self):
+        runtime_dir = Path("tests_runtime_quinto_missing_next_data")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/895686185/comprar",
+            "listing_id": "895686185",
+            "business_type": "sale",
+        }
+
+        try:
+            metrics = init_metrics("quinto_missing_next_data")
+            collector = {"records": [], "metrics": metrics}
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector=collector,
+                max_consecutive_failures=1,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+
+            with patch("builtins.print") as mocked_print:
+                first_retry = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(request.url),
+                        request=request,
+                        body=b"<html></html>",
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+                second_retry = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(first_retry.url),
+                        request=first_retry,
+                        body=b"<html></html>",
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+                terminal_result = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(second_retry.url),
+                        request=second_retry,
+                        body=b"<html></html>",
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+            pending = pending_listing_records(
+                [record],
+                partial_jsonl_path=resume_paths["partial_jsonl"],
+                processed_jsonl_path=resume_paths["processed_jsonl"],
+            )
+            state = json.loads(resume_paths["state_json"].read_text(encoding="utf-8"))
+            log_output = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list)
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertTrue(first_retry.dont_filter)
+        self.assertTrue(second_retry.dont_filter)
+        self.assertIsNone(terminal_result)
+        self.assertEqual(processed[0]["status"], "missing_next_data")
+        self.assertEqual(processed[0]["key"], "id:895686185")
+        self.assertEqual(pending, [])
+        self.assertEqual(metrics["requests"], 3)
+        self.assertEqual(metrics["successes"], 3)
+        self.assertEqual(metrics["listing_page_requests"], 3)
+        self.assertEqual(metrics["listing_page_failures"], 3)
+        self.assertEqual(metrics["listing_page_missing_next_data_failures"], 3)
+        self.assertEqual(metrics["listing_page_missing_next_data_terminal"], 1)
+        self.assertEqual(spider.consecutive_failures, 0)
+        self.assertEqual(state["missing_next_data_attempts"], {})
+        self.assertIn("listing_collection_item_missing_next_data_retry", log_output)
+        self.assertIn("listing_collection_item_missing_next_data_terminal", log_output)
+        self.assertIn("property_id=895686185", log_output)
+        self.assertIn("status=200", log_output)
+        self.assertIn("attempt=3", log_output)
+        self.assertIn("attempt_limit=3", log_output)
+
+    def test_quinto_missing_next_data_attempt_count_survives_resume(self):
+        runtime_dir = Path("tests_runtime_quinto_missing_next_data_resume")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        resume_paths["root"].mkdir(parents=True, exist_ok=True)
+        record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/895686188/comprar",
+            "listing_id": "895686188",
+            "business_type": "sale",
+        }
+        saved_metrics = init_metrics("quinto_missing_next_data_resume")
+        saved_metrics["listing_page_missing_next_data_failures"] = 2
+        saved_metrics["listing_page_failures"] = 2
+        resume_paths["state_json"].write_text(
+            json.dumps(
+                {
+                    "status": "in_progress",
+                    "missing_next_data_attempts": {"id:895686188": 2},
+                    "metrics": saved_metrics,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        try:
+            collector = {"records": [], "metrics": saved_metrics}
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector=collector,
+                max_consecutive_failures=100,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            result = spider.parse_listing_response(
+                HtmlResponse(
+                    url=str(request.url),
+                    request=request,
+                    body=b"<html></html>",
+                    encoding="utf-8",
+                    status=200,
+                )
+            )
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertIsNone(result)
+        self.assertEqual(processed[0]["status"], "missing_next_data")
+        self.assertEqual(saved_metrics["listing_page_missing_next_data_failures"], 3)
+        self.assertEqual(saved_metrics["listing_page_missing_next_data_terminal"], 1)
+
+    def test_quinto_missing_initial_state_retries_twice_then_becomes_terminal(self):
+        runtime_dir = Path("tests_runtime_quinto_missing_initial_state")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/895686707/comprar",
+            "listing_id": "895686707",
+            "business_type": "sale",
+        }
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps({"props": {"pageProps": {}}})
+            + "</script>"
+        )
+
+        try:
+            metrics = init_metrics("quinto_missing_initial_state")
+            collector = {"records": [], "metrics": metrics}
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector=collector,
+                max_consecutive_failures=1,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+
+            with patch("builtins.print") as mocked_print:
+                first_retry = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(request.url), request=request, body=html.encode(), encoding="utf-8", status=200
+                    )
+                )
+                second_retry = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(first_retry.url),
+                        request=first_retry,
+                        body=html.encode(),
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+                terminal_result = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=str(second_retry.url),
+                        request=second_retry,
+                        body=html.encode(),
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+            pending = pending_listing_records(
+                [record],
+                partial_jsonl_path=resume_paths["partial_jsonl"],
+                processed_jsonl_path=resume_paths["processed_jsonl"],
+            )
+            state = json.loads(resume_paths["state_json"].read_text(encoding="utf-8"))
+            log_output = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list)
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertTrue(first_retry.dont_filter)
+        self.assertTrue(second_retry.dont_filter)
+        self.assertIsNone(terminal_result)
+        self.assertEqual(processed[0]["status"], "missing_initial_state")
+        self.assertEqual(processed[0]["key"], "id:895686707")
+        self.assertEqual(pending, [])
+        self.assertEqual(metrics["requests"], 3)
+        self.assertEqual(metrics["successes"], 3)
+        self.assertEqual(metrics["listing_page_requests"], 3)
+        self.assertEqual(metrics["listing_page_failures"], 3)
+        self.assertEqual(metrics["listing_page_missing_initial_state_failures"], 3)
+        self.assertEqual(metrics["listing_page_missing_initial_state_terminal"], 1)
+        self.assertEqual(spider.consecutive_failures, 0)
+        self.assertEqual(state["missing_initial_state_attempts"], {})
+        self.assertIn("listing_collection_item_missing_initial_state_retry", log_output)
+        self.assertIn("listing_collection_item_missing_initial_state_terminal", log_output)
+        self.assertIn("property_id=895686707", log_output)
+        self.assertIn("status=200", log_output)
+        self.assertIn("attempt=3", log_output)
+        self.assertIn("attempt_limit=3", log_output)
+
+    def test_quinto_missing_initial_state_attempt_count_survives_resume(self):
+        runtime_dir = Path("tests_runtime_quinto_missing_initial_state_resume")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        resume_paths["root"].mkdir(parents=True, exist_ok=True)
+        record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/895687077/comprar",
+            "listing_id": "895687077",
+            "business_type": "sale",
+        }
+        saved_metrics = init_metrics("quinto_missing_initial_state_resume")
+        saved_metrics["listing_page_missing_initial_state_failures"] = 2
+        saved_metrics["listing_page_failures"] = 2
+        resume_paths["state_json"].write_text(
+            json.dumps(
+                {
+                    "status": "in_progress",
+                    "missing_initial_state_attempts": {"id:895687077": 2},
+                    "metrics": saved_metrics,
+                }
+            ),
+            encoding="utf-8",
+        )
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps({"props": {"pageProps": {}}})
+            + "</script>"
+        )
+
+        try:
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector={"records": [], "metrics": saved_metrics},
+                max_consecutive_failures=100,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            result = spider.parse_listing_response(
+                HtmlResponse(
+                    url=str(request.url), request=request, body=html.encode(), encoding="utf-8", status=200
+                )
+            )
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertIsNone(result)
+        self.assertEqual(processed[0]["status"], "missing_initial_state")
+        self.assertEqual(saved_metrics["listing_page_missing_initial_state_failures"], 3)
+        self.assertEqual(saved_metrics["listing_page_missing_initial_state_terminal"], 1)
+
+    def test_quinto_success_clears_missing_payload_attempt_counts(self):
+        runtime_dir = Path("tests_runtime_quinto_missing_payload_success")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        resume_paths["root"].mkdir(parents=True, exist_ok=True)
+        record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/123/comprar",
+            "listing_id": "123",
+            "business_type": "sale",
+        }
+        resume_paths["state_json"].write_text(
+            json.dumps(
+                {
+                    "status": "in_progress",
+                    "missing_next_data_attempts": {"id:123": 1},
+                    "missing_initial_state_attempts": {"id:123": 2},
+                }
+            ),
+            encoding="utf-8",
+        )
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps({"props": {"pageProps": {"initialState": {}}}})
+            + "</script>"
+        )
+
+        try:
+            metrics = init_metrics("quinto_missing_payload_success")
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector={"records": [], "metrics": metrics},
+                max_consecutive_failures=100,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            spider.parse_listing_response(
+                HtmlResponse(
+                    url=str(request.url), request=request, body=html.encode(), encoding="utf-8", status=200
+                )
+            )
+            state = json.loads(resume_paths["state_json"].read_text(encoding="utf-8"))
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertEqual(metrics["listing_page_successes"], 1)
+        self.assertEqual(state["missing_next_data_attempts"], {})
+        self.assertEqual(state["missing_initial_state_attempts"], {})
 
     def test_listing_spider_keeps_transient_failures_pending(self):
         runtime_dir = Path("tests_runtime_quinto_transient_ledger")

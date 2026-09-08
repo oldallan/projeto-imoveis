@@ -10,8 +10,10 @@ from scrapy.http import Request, Response
 
 from scrapers.http_metrics import init_metrics
 from scrapers.io_utils import load_csv_records
+from scrapers.logging_utils import log_warn
 from scrapers.listings_resume import (
     BaseListingsSpider,
+    build_listing_resume_key,
     build_incomplete_output_path,
     build_resume_paths,
     cleanup_incomplete_outputs,
@@ -27,6 +29,14 @@ from scrapers.scrapy_runner import run_spider
 from scrapers.scrapy_support import build_scrapy_settings as build_base_scrapy_settings
 
 
+class MissingNextDataError(ValueError):
+    """Raised when a QuintoAndar HTTP 200 page omits __NEXT_DATA__."""
+
+
+class MissingInitialStateError(ValueError):
+    """Raised when a QuintoAndar HTTP 200 page has no usable initialState."""
+
+
 def extract_next_data(html: str) -> Dict[str, Any]:
     match = re.search(
         r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
@@ -34,7 +44,7 @@ def extract_next_data(html: str) -> Dict[str, Any]:
         flags=re.DOTALL,
     )
     if not match:
-        raise ValueError("Nao foi possivel localizar __NEXT_DATA__.")
+        raise MissingNextDataError("Nao foi possivel localizar __NEXT_DATA__.")
     return json.loads(match.group(1))
 
 
@@ -210,7 +220,10 @@ def parse_listing_page_html(
     primary_business_type: str | None = None,
 ) -> dict[str, Any]:
     next_data = extract_next_data(html)
-    state = next_data["props"]["pageProps"]["initialState"]
+    page_props = next_data["props"]["pageProps"]
+    state = page_props.get("initialState")
+    if not isinstance(state, Mapping):
+        raise MissingInitialStateError("Nao foi possivel localizar um initialState valido.")
     house_state = state.get("house") or {}
     house_info = ((house_state.get("houseInfo")) or {})
     listings_by_context = _index_listings_by_business_context(house_info.get("listings"))
@@ -346,6 +359,8 @@ class QuintoListingsSpider(BaseListingsSpider):
     name = "quinto_listings"
     allowed_domains = ["quintoandar.com.br", "www.quintoandar.com.br"]
     terminal_not_found_statuses = {404, 500}
+    missing_next_data_attempt_limit = 3
+    missing_initial_state_attempt_limit = 3
 
     def build_request(self, record: Dict[str, Any], *, scheduled_index: int) -> Request | None:
         listing_url = str(record.get("listing_url") or "").strip()
@@ -374,6 +389,101 @@ class QuintoListingsSpider(BaseListingsSpider):
             grouped_business_types=response.meta.get("grouped_business_types"),
             primary_business_type=response.meta.get("primary_business_type"),
         )
+
+    def handle_parse_error(self, response: Response, exc: Exception):
+        if int(response.status) == 200 and isinstance(exc, MissingNextDataError):
+            return self._handle_missing_payload_error(
+                response,
+                exc,
+                error_code="missing_next_data",
+                attempts=self.missing_next_data_attempts,
+                attempt_limit=self.missing_next_data_attempt_limit,
+                failure_metric="listing_page_missing_next_data_failures",
+                terminal_metric="listing_page_missing_next_data_terminal",
+            )
+        if int(response.status) == 200 and isinstance(exc, MissingInitialStateError):
+            return self._handle_missing_payload_error(
+                response,
+                exc,
+                error_code="missing_initial_state",
+                attempts=self.missing_initial_state_attempts,
+                attempt_limit=self.missing_initial_state_attempt_limit,
+                failure_metric="listing_page_missing_initial_state_failures",
+                terminal_metric="listing_page_missing_initial_state_terminal",
+            )
+        return super().handle_parse_error(response, exc)
+
+    def _handle_missing_payload_error(
+        self,
+        response: Response,
+        exc: Exception,
+        *,
+        error_code: str,
+        attempts: dict[str, int],
+        attempt_limit: int,
+        failure_metric: str,
+        terminal_metric: str,
+    ):
+        scheduled_index = int(response.meta["scheduled_index"])
+        resume_record = response.meta.get("_resume_record") or response.meta
+        resume_key = build_listing_resume_key(resume_record)
+        previous_attempts = int(attempts.get(str(resume_key), 0) or 0)
+        attempt = previous_attempts + 1
+        if resume_key:
+            attempts[str(resume_key)] = attempt
+
+        self.metrics[failure_metric] += 1
+        property_id = str(
+            resume_record.get("property_id")
+            or resume_record.get("listing_id")
+            or ""
+        ).strip() or None
+
+        if attempt < attempt_limit:
+            log_warn(
+                f"listing_collection_item_{error_code}_retry",
+                label=self.label,
+                processed=f"{scheduled_index}/{self.total_records}",
+                url=response.url,
+                property_id=property_id,
+                status=response.status,
+                attempt=attempt,
+                attempt_limit=attempt_limit,
+                error=exc,
+            )
+            self.metrics["listing_page_requests"] += 1
+            self._persist_runtime_state(status="in_progress")
+            return response.request.replace(dont_filter=True)
+
+        self.metrics[terminal_metric] += 1
+        self._mark_terminal_processed(
+            resume_record,
+            status=error_code,
+            scheduled_index=scheduled_index,
+            url=response.url,
+        )
+        if resume_key:
+            attempts.pop(str(resume_key), None)
+        log_warn(
+            f"listing_collection_item_{error_code}_terminal",
+            label=self.label,
+            processed=f"{scheduled_index}/{self.total_records}",
+            url=response.url,
+            property_id=property_id,
+            status=response.status,
+            attempt=attempt,
+            attempt_limit=attempt_limit,
+            error=exc,
+        )
+        self._finalize_attempt()
+        return None
+
+    def handle_parse_success(self, response: Response) -> None:
+        resume_record = response.meta.get("_resume_record") or response.meta
+        resume_key = build_listing_resume_key(resume_record)
+        if resume_key:
+            self.missing_next_data_attempts.pop(str(resume_key), None)
+            self.missing_initial_state_attempts.pop(str(resume_key), None)
 
 
 def run_scrapy_collection(

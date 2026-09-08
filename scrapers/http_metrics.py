@@ -18,6 +18,11 @@ def init_metrics(label: str) -> dict[str, Any]:
         "listing_page_successes": 0,
         "listing_page_failures": 0,
         "listing_page_not_founds": 0,
+        "listing_page_missing_next_data_failures": 0,
+        "listing_page_missing_next_data_terminal": 0,
+        "listing_page_missing_initial_state_failures": 0,
+        "listing_page_missing_initial_state_terminal": 0,
+        "listing_page_redirected_to_enterprise": 0,
         "listing_page_in_flight_peak": 0,
         "stop_reason": None,
     }

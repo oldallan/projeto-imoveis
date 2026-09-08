@@ -26,7 +26,13 @@ from scrapers.logging_utils import (
 DEFAULT_FLUSH_BATCH_SIZE = 500
 DEFAULT_INCOMPLETE_SNAPSHOT_BATCH_SIZE = 1000
 DEFAULT_LISTING_BATCH_SIZE = 500
-TERMINAL_NO_OUTPUT_STATUSES = {"not_found", "skipped_no_url"}
+TERMINAL_NO_OUTPUT_STATUSES = {
+    "missing_initial_state",
+    "missing_next_data",
+    "not_found",
+    "redirected_to_enterprise",
+    "skipped_no_url",
+}
 
 
 def utc_now_iso() -> str:
@@ -478,6 +484,24 @@ class BaseListingsSpider(scrapy.Spider):
         self.output_path = str(output_path or (resolved_resume_dir / f"{label}_listings.csv"))
         self.parquet_output_path = str(parquet_output_path or Path(self.output_path).with_suffix(".parquet"))
         saved_state = load_resume_state(self.resume_state_path)
+        saved_missing_next_data_attempts = saved_state.get("missing_next_data_attempts")
+        self.missing_next_data_attempts = {
+            str(key): max(0, int(value or 0))
+            for key, value in (
+                saved_missing_next_data_attempts.items()
+                if isinstance(saved_missing_next_data_attempts, Mapping)
+                else []
+            )
+        }
+        saved_missing_initial_state_attempts = saved_state.get("missing_initial_state_attempts")
+        self.missing_initial_state_attempts = {
+            str(key): max(0, int(value or 0))
+            for key, value in (
+                saved_missing_initial_state_attempts.items()
+                if isinstance(saved_missing_initial_state_attempts, Mapping)
+                else []
+            )
+        }
         self.incomplete_output_path = str(build_incomplete_output_path(self.output_path))
         self.incomplete_parquet_output_path = str(build_incomplete_output_path(self.parquet_output_path))
         self.incomplete_snapshot_batch_size = max(1, int(incomplete_snapshot_batch_size))
@@ -498,6 +522,8 @@ class BaseListingsSpider(scrapy.Spider):
             "incomplete_output_path": self.incomplete_output_path,
             "incomplete_parquet_output_path": self.incomplete_parquet_output_path,
             "incomplete_output_rows": self.incomplete_snapshot_rows,
+            "missing_next_data_attempts": dict(self.missing_next_data_attempts),
+            "missing_initial_state_attempts": dict(self.missing_initial_state_attempts),
         }
 
     def start_requests(self):
@@ -586,6 +612,8 @@ class BaseListingsSpider(scrapy.Spider):
             "incomplete_output_path": self.incomplete_output_path,
             "incomplete_parquet_output_path": self.incomplete_parquet_output_path,
             "incomplete_output_rows": self.incomplete_snapshot_rows,
+            "missing_next_data_attempts": dict(self.missing_next_data_attempts),
+            "missing_initial_state_attempts": dict(self.missing_initial_state_attempts),
             "metrics": dict(self.metrics),
             "consecutive_failures": self.consecutive_failures,
             "pages_processed": self.completed_attempts,
@@ -656,6 +684,24 @@ class BaseListingsSpider(scrapy.Spider):
         if entry is not None:
             append_jsonl_records(self.processed_jsonl_path, [entry])
 
+    def handle_parse_error(self, response: Response, exc: Exception):
+        scheduled_index = int(response.meta["scheduled_index"])
+        log_warn(
+            "listing_collection_item_parse_failed",
+            label=self.label,
+            processed=f"{scheduled_index}/{self.total_records}",
+            error=exc,
+            consecutive_failures=self.consecutive_failures + 1,
+        )
+        self._finalize_attempt(count_failure=True)
+        return None
+
+    def handle_parse_success(self, response: Response) -> None:
+        return None
+
+    def handle_response_before_parse(self, response: Response) -> bool:
+        return False
+
     def parse_listing_response(self, response: Response):
         scheduled_index = int(response.meta["scheduled_index"])
         status = int(response.status)
@@ -702,21 +748,17 @@ class BaseListingsSpider(scrapy.Spider):
             self._finalize_attempt(count_failure=True)
             return None
 
+        if self.handle_response_before_parse(response):
+            return None
+
         try:
             listing_record = self.parse_record(response)
         except Exception as exc:
             self.metrics["listing_page_failures"] += 1
-            log_warn(
-                "listing_collection_item_parse_failed",
-                label=self.label,
-                processed=f"{scheduled_index}/{self.total_records}",
-                error=exc,
-                consecutive_failures=self.consecutive_failures + 1,
-            )
-            self._finalize_attempt(count_failure=True)
-            return None
+            return self.handle_parse_error(response, exc)
 
         if self.has_required_listing_keys(listing_record):
+            self.handle_parse_success(response)
             self.metrics["listing_page_successes"] += 1
             self.metrics["items_kept"] += 1
             self._accept_listing_record(listing_record)
