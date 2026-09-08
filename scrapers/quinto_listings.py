@@ -4,6 +4,7 @@ import html as html_lib
 import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
+from urllib.parse import urlparse
 
 import scrapy
 from scrapy.http import Request, Response
@@ -389,6 +390,66 @@ class QuintoListingsSpider(BaseListingsSpider):
             grouped_business_types=response.meta.get("grouped_business_types"),
             primary_business_type=response.meta.get("primary_business_type"),
         )
+
+    @staticmethod
+    def _is_quinto_host(hostname: str | None) -> bool:
+        normalized = str(hostname or "").strip().lower()
+        return normalized == "quintoandar.com.br" or normalized.endswith(".quintoandar.com.br")
+
+    @classmethod
+    def _is_listing_to_enterprise_redirect(cls, original_url: str, final_url: str) -> bool:
+        original = urlparse(original_url)
+        final = urlparse(final_url)
+        original_path = original.path.rstrip("/").lower()
+        final_path = final.path.rstrip("/").lower()
+        original_is_listing = original_path == "/imovel" or original_path.startswith("/imovel/")
+        final_is_enterprise = final_path == "/empreendimento" or final_path.startswith("/empreendimento/")
+        return (
+            cls._is_quinto_host(original.hostname)
+            and cls._is_quinto_host(final.hostname)
+            and original_is_listing
+            and final_is_enterprise
+        )
+
+    def handle_response_before_parse(self, response: Response) -> bool:
+        original_url = str(response.meta.get("listing_url") or response.request.url)
+        final_url = str(response.url)
+        if not self._is_listing_to_enterprise_redirect(original_url, final_url):
+            return False
+
+        scheduled_index = int(response.meta["scheduled_index"])
+        resume_record = response.meta.get("_resume_record") or response.meta
+        resume_key = build_listing_resume_key(resume_record)
+        property_id = str(
+            resume_record.get("property_id")
+            or resume_record.get("listing_id")
+            or _derive_property_id_from_listing_url(original_url)
+            or ""
+        ).strip() or None
+
+        self.metrics["listing_page_failures"] += 1
+        self.metrics["listing_page_redirected_to_enterprise"] += 1
+        self._mark_terminal_processed(
+            resume_record,
+            status="redirected_to_enterprise",
+            scheduled_index=scheduled_index,
+            url=final_url,
+        )
+        if resume_key:
+            self.missing_next_data_attempts.pop(str(resume_key), None)
+            self.missing_initial_state_attempts.pop(str(resume_key), None)
+        log_warn(
+            "listing_collection_item_redirected_to_enterprise",
+            label=self.label,
+            processed=f"{scheduled_index}/{self.total_records}",
+            original_url=original_url,
+            final_url=final_url,
+            property_id=property_id,
+            status=response.status,
+            terminal_status="redirected_to_enterprise",
+        )
+        self._finalize_attempt()
+        return True
 
     def handle_parse_error(self, response: Response, exc: Exception):
         if int(response.status) == 200 and isinstance(exc, MissingNextDataError):

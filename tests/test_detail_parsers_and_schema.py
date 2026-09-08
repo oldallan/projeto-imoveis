@@ -1998,6 +1998,139 @@ class ListingParserTests(unittest.TestCase):
         self.assertEqual(state["missing_next_data_attempts"], {})
         self.assertEqual(state["missing_initial_state_attempts"], {})
 
+    def test_quinto_enterprise_redirect_becomes_terminal_without_retry(self):
+        runtime_dir = Path("tests_runtime_quinto_enterprise_redirect")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        resume_paths["root"].mkdir(parents=True, exist_ok=True)
+        original_url = "https://www.quintoandar.com.br/imovel/895686707/comprar/apartamento"
+        final_url = "https://www.quintoandar.com.br/empreendimento/895686707?quartos=1"
+        record = {
+            "listing_url": original_url,
+            "listing_id": "895686707",
+            "business_type": "sale",
+        }
+        resume_paths["state_json"].write_text(
+            json.dumps(
+                {
+                    "status": "in_progress",
+                    "missing_next_data_attempts": {"id:895686707": 1},
+                    "missing_initial_state_attempts": {"id:895686707": 2},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        try:
+            metrics = init_metrics("quinto_enterprise_redirect")
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector={"records": [], "metrics": metrics},
+                max_consecutive_failures=1,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            with patch("builtins.print") as mocked_print:
+                result = spider.parse_listing_response(
+                    HtmlResponse(
+                        url=final_url,
+                        request=request,
+                        body=b"<html><body>enterprise</body></html>",
+                        encoding="utf-8",
+                        status=200,
+                    )
+                )
+
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+            pending = pending_listing_records(
+                [record],
+                partial_jsonl_path=resume_paths["partial_jsonl"],
+                processed_jsonl_path=resume_paths["processed_jsonl"],
+            )
+            state = json.loads(resume_paths["state_json"].read_text(encoding="utf-8"))
+            log_output = "\n".join(str(call.args[0]) for call in mocked_print.call_args_list)
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertIsNone(result)
+        self.assertEqual(processed[0]["status"], "redirected_to_enterprise")
+        self.assertEqual(processed[0]["key"], "id:895686707")
+        self.assertEqual(processed[0]["listing_url"], final_url)
+        self.assertEqual(pending, [])
+        self.assertEqual(metrics["requests"], 1)
+        self.assertEqual(metrics["successes"], 1)
+        self.assertEqual(metrics["listing_page_requests"], 1)
+        self.assertEqual(metrics["listing_page_failures"], 1)
+        self.assertEqual(metrics["listing_page_redirected_to_enterprise"], 1)
+        self.assertEqual(spider.consecutive_failures, 0)
+        self.assertEqual(state["missing_next_data_attempts"], {})
+        self.assertEqual(state["missing_initial_state_attempts"], {})
+        self.assertIn("listing_collection_item_redirected_to_enterprise", log_output)
+        self.assertIn(f"original_url={original_url}", log_output)
+        self.assertIn(f"final_url={final_url}", log_output)
+        self.assertIn("property_id=895686707", log_output)
+        self.assertIn("status=200", log_output)
+        self.assertIn("terminal_status=redirected_to_enterprise", log_output)
+
+    def test_quinto_changed_listing_url_still_uses_normal_parser(self):
+        runtime_dir = Path("tests_runtime_quinto_changed_listing_url")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        original_url = "https://www.quintoandar.com.br/imovel/123/comprar/apartamento"
+        final_url = "https://www.quintoandar.com.br/imovel/123/comprar/apartamento-renomeado"
+        record = {
+            "listing_url": original_url,
+            "listing_id": "123",
+            "business_type": "sale",
+        }
+        html = (
+            '<script id="__NEXT_DATA__" type="application/json">'
+            + json.dumps({"props": {"pageProps": {"initialState": {}}}})
+            + "</script>"
+        )
+
+        try:
+            metrics = init_metrics("quinto_changed_listing_url")
+            collector = {"records": [], "metrics": metrics}
+            spider = QuintoListingsSpider(
+                records=[record],
+                collector=collector,
+                max_consecutive_failures=1,
+                label="quinto",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            result = spider.parse_listing_response(
+                HtmlResponse(
+                    url=final_url,
+                    request=request,
+                    body=html.encode(),
+                    encoding="utf-8",
+                    status=200,
+                )
+            )
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertIsNone(result)
+        self.assertEqual(metrics["listing_page_successes"], 1)
+        self.assertEqual(metrics["listing_page_failures"], 0)
+        self.assertEqual(metrics["listing_page_redirected_to_enterprise"], 0)
+        self.assertEqual(len(collector["records"]), 1)
+
+    def test_quinto_enterprise_in_query_string_does_not_terminalize(self):
+        original_url = "https://www.quintoandar.com.br/imovel/123/comprar/apartamento"
+        final_url = "https://www.quintoandar.com.br/imovel/123?destino=/empreendimento/123"
+
+        self.assertFalse(
+            QuintoListingsSpider._is_listing_to_enterprise_redirect(original_url, final_url)
+        )
+
     def test_listing_spider_keeps_transient_failures_pending(self):
         runtime_dir = Path("tests_runtime_quinto_transient_ledger")
         shutil.rmtree(runtime_dir, ignore_errors=True)
