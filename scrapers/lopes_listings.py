@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import parse_qsl, urlparse
 
 import scrapy
 from scrapy.http import Request, Response
 
 from scrapers.http_metrics import init_metrics
 from scrapers.io_utils import load_csv_records
+from scrapers.logging_utils import log_warn
 from scrapers.listings_resume import (
     BaseListingsSpider,
+    build_listing_resume_key,
     build_incomplete_output_path,
     build_resume_paths,
     cleanup_incomplete_outputs,
@@ -224,6 +227,65 @@ class LopesListingsSpider(BaseListingsSpider):
 
     def parse_record(self, response: Response) -> dict[str, Any]:
         return parse_listing_page_html(response.text, fallback_url=str(response.meta["listing_url"]))
+
+    @staticmethod
+    def _is_lopes_host(hostname: str | None) -> bool:
+        normalized = str(hostname or "").strip().lower()
+        return normalized == "lopes.com.br" or normalized.endswith(".lopes.com.br")
+
+    @classmethod
+    def _is_listing_to_not_found_redirect(cls, original_url: str, final_url: str) -> bool:
+        original = urlparse(original_url)
+        final = urlparse(final_url)
+        original_path = original.path.rstrip("/").lower()
+        final_path = final.path.rstrip("/").lower()
+        query_keys = {key.lower() for key, _ in parse_qsl(final.query, keep_blank_values=True)}
+        return (
+            cls._is_lopes_host(original.hostname)
+            and cls._is_lopes_host(final.hostname)
+            and (original_path == "/imovel" or original_path.startswith("/imovel/"))
+            and (final_path == "/busca" or final_path.startswith("/busca/"))
+            and "notfound" in query_keys
+        )
+
+    def handle_response_before_parse(self, response: Response) -> bool:
+        original_url = str(response.meta.get("listing_url") or response.request.url)
+        final_url = str(response.url)
+        if not self._is_listing_to_not_found_redirect(original_url, final_url):
+            return False
+
+        scheduled_index = int(response.meta["scheduled_index"])
+        resume_record = response.meta.get("_resume_record") or response.meta
+        resume_key = build_listing_resume_key(resume_record)
+        property_id = str(
+            resume_record.get("property_id")
+            or resume_record.get("listing_id")
+            or _derive_property_id_from_listing_url(original_url)
+            or ""
+        ).strip() or None
+
+        self.metrics["listing_page_failures"] += 1
+        self.metrics["listing_page_not_founds"] += 1
+        self.metrics["listing_page_redirected_to_not_found"] += 1
+        self._mark_terminal_processed(
+            resume_record,
+            status="redirected_to_not_found",
+            scheduled_index=scheduled_index,
+            url=final_url,
+        )
+        log_warn(
+            "listing_collection_item_redirected_to_not_found",
+            label=self.label,
+            processed=f"{scheduled_index}/{self.total_records}",
+            original_url=original_url,
+            final_url=final_url,
+            property_id=property_id,
+            status=response.status,
+            terminal_status="redirected_to_not_found",
+            resume_key=resume_key,
+        )
+        self._finalize_attempt()
+        return True
 
 
 def run_scrapy_collection(

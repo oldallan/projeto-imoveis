@@ -31,6 +31,7 @@ TERMINAL_NO_OUTPUT_STATUSES = {
     "missing_next_data",
     "not_found",
     "redirected_to_enterprise",
+    "redirected_to_not_found",
     "skipped_no_url",
 }
 
@@ -317,6 +318,11 @@ def run_batched_scrapy_collection(
     resume_paths = build_resume_paths(resolved_resume_dir)
     saved_state = load_resume_state(resume_paths["state_json"])
     metrics = restore_metrics(init_metrics(label), saved_state.get("metrics"))
+    if (
+        saved_state.get("status") == "failed_terminal"
+        and metrics.get("stop_reason") == "max_consecutive_failures"
+    ):
+        metrics["stop_reason"] = None
     metrics["items_seen"] = len(records)
     metrics["batch_size"] = batch_size
     metrics.setdefault("batches_started", 0)

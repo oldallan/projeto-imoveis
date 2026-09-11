@@ -138,7 +138,7 @@ class CollectListingsStage(Stage):
             "input_rows": int(discovery_artifact.get("rows") or 0),
             "output_rows": 0,
             "no_op": False,
-            "resumed": bool(resume_state.get("status") == "in_progress"),
+            "resumed": resume_state.get("status") in {"in_progress", "failed_terminal"},
             "skipped_completed": False,
         }
         artifacts: list[ArtifactRecord] = []

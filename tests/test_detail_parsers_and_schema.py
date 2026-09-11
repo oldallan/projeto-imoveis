@@ -23,7 +23,11 @@ from scrapers.discovery_incremental import (
 )
 from scrapers.http_metrics import init_metrics
 from scrapers.io_utils import save_parquet_records
-from scrapers.listings_resume import build_resume_paths, load_jsonl_records, pending_listing_records
+from scrapers.listings_resume import (
+    build_resume_paths,
+    load_jsonl_records,
+    pending_listing_records,
+)
 from scrapers.lopes_discovery import (
     collect_discovery_records as collect_lopes_discovery_records,
     parse_listing_sitemap as parse_lopes_listing_sitemap,
@@ -1110,6 +1114,68 @@ class ListingParserTests(unittest.TestCase):
         self.assertEqual(metrics["listing_page_successes"], 1)
         self.assertEqual(metrics["listing_page_failures"], 0)
 
+    def test_lopes_redirect_to_not_found_search_is_terminal(self):
+        runtime_dir = Path("tests_runtime_lopes_not_found_redirect")
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(runtime_dir / "resume")
+        original_url = "https://www.lopes.com.br/imovel/REO123456/venda-apartamento-sao-paulo"
+        final_url = "https://www.lopes.com.br/busca/venda/br/sp/sao-paulo/tipo/apartamento?notfound="
+        record = {
+            "listing_id": "REO123456",
+            "listing_url": original_url,
+            "business_type": "sale",
+        }
+
+        try:
+            metrics = init_metrics("lopes_not_found_redirect")
+            collector = {"records": [], "metrics": metrics}
+            spider = LopesListingsSpider(
+                records=[record],
+                collector=collector,
+                max_consecutive_failures=1,
+                label="lopes",
+                partial_jsonl_path=str(resume_paths["partial_jsonl"]),
+                processed_jsonl_path=str(resume_paths["processed_jsonl"]),
+                resume_state_path=str(resume_paths["state_json"]),
+            )
+            request = next(iter(spider.start_requests()))
+            response = HtmlResponse(
+                url=final_url,
+                request=request,
+                body=b"<html></html>",
+                encoding="utf-8",
+                status=200,
+            )
+
+            result = spider.parse_listing_response(response)
+            processed = load_jsonl_records(resume_paths["processed_jsonl"])
+            pending = pending_listing_records(
+                [record],
+                partial_jsonl_path=resume_paths["partial_jsonl"],
+                processed_jsonl_path=resume_paths["processed_jsonl"],
+            )
+        finally:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
+        self.assertIsNone(result)
+        self.assertEqual(processed[0]["status"], "redirected_to_not_found")
+        self.assertEqual(processed[0]["key"], "id:REO123456")
+        self.assertEqual(processed[0]["listing_url"], final_url)
+        self.assertEqual(pending, [])
+        self.assertEqual(metrics["listing_page_failures"], 1)
+        self.assertEqual(metrics["listing_page_not_founds"], 1)
+        self.assertEqual(metrics["listing_page_redirected_to_not_found"], 1)
+        self.assertEqual(spider.consecutive_failures, 0)
+        self.assertNotEqual(metrics["stop_reason"], "max_consecutive_failures")
+
+    def test_lopes_search_redirect_without_notfound_is_not_terminalized(self):
+        original_url = "https://www.lopes.com.br/imovel/REO123456/venda-apartamento-sao-paulo"
+        final_url = "https://www.lopes.com.br/busca/venda/br/sp/sao-paulo/tipo/apartamento"
+
+        self.assertFalse(
+            LopesListingsSpider._is_listing_to_not_found_redirect(original_url, final_url)
+        )
+
     def test_lopes_spider_aborts_after_five_consecutive_useful_failures(self):
         metrics = init_metrics("lopes_abort")
         records = [
@@ -1625,6 +1691,57 @@ class ListingParserTests(unittest.TestCase):
 
         self.assertEqual([record["listing_id"] for record in captured_records], ["2"])
         self.assertEqual(len(records), 2)
+        self.assertEqual(metrics["pending_records"], 0)
+
+    def test_run_scrapy_collection_resumes_after_terminal_failure_state(self):
+        sample_record = {
+            "listing_url": "https://www.quintoandar.com.br/imovel/1/comprar",
+            "listing_id": "1",
+            "business_type": "sale",
+        }
+        output_dir = Path("tests_runtime_terminal_failure_resume")
+        shutil.rmtree(output_dir, ignore_errors=True)
+        resume_paths = build_resume_paths(output_dir / "resume")
+        resume_paths["state_json"].parent.mkdir(parents=True, exist_ok=True)
+        resume_paths["state_json"].write_text(
+            json.dumps(
+                {
+                    "status": "failed_terminal",
+                    "metrics": {"stop_reason": "max_consecutive_failures"},
+                    "consecutive_failures": 100,
+                }
+            ),
+            encoding="utf-8",
+        )
+        captured_records: list[dict[str, object]] = []
+
+        def fake_run_spider(spider_cls, *, settings, **kwargs):
+            captured_records.extend(kwargs["records"])
+            kwargs["collector"]["records"].append(
+                {
+                    "listing_url": sample_record["listing_url"],
+                    "property_id": sample_record["listing_id"],
+                    "business_type": sample_record["business_type"],
+                }
+            )
+
+        try:
+            with patch("scrapers.quinto_listings.run_spider", side_effect=fake_run_spider):
+                records, metrics = run_quinto_scrapy_collection(
+                    records=[sample_record],
+                    label="terminal_failure_resume",
+                    max_consecutive_failures=5,
+                    listings_output_path=str(output_dir / "quinto_listings.csv"),
+                    listings_parquet_output_path=str(output_dir / "quinto_listings.parquet"),
+                    resume_dir=str(resume_paths["root"]),
+                )
+        finally:
+            shutil.rmtree(output_dir, ignore_errors=True)
+
+        self.assertEqual(len(captured_records), 1)
+        self.assertEqual(captured_records[0]["listing_id"], sample_record["listing_id"])
+        self.assertEqual(len(records), 1)
+        self.assertEqual(metrics["stop_reason"], "completed")
         self.assertEqual(metrics["pending_records"], 0)
 
     def test_listing_spider_marks_404_as_terminal_without_output(self):
