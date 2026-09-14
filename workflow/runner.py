@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
+from scrapers.lopes_state import queue_metrics, state_db_path
 from stages import STAGE_SEQUENCE, get_stage
 from workflow.manifest import read_json, write_json
 from workflow.models import StageResult
@@ -61,12 +62,22 @@ class PipelineRunner:
         results: list[dict[str, object]] = []
         pipeline_status = "success"
         blocked_stage: str | None = None
+        stop_reason: str | None = None
 
         for stage_name in selected_stages:
             if stage_name == "collect_discovery" and not from_stage and not force_discovery:
                 existing_manifest_path = stage_manifest_path(context, "collect_discovery")
                 existing_manifest = self._load_reusable_success_manifest(existing_manifest_path)
-                if existing_manifest is not None:
+                lopes_artifact_present = bool(
+                    existing_manifest
+                    and any(
+                        artifact.get("metadata", {}).get("source") == "lopes"
+                        for artifact in existing_manifest.get("artifacts", [])
+                    )
+                )
+                if existing_manifest is not None and (
+                    not lopes_artifact_present or state_db_path(context.output_root).exists()
+                ):
                     result_payload = {
                         key: value
                         for key, value in existing_manifest.items()
@@ -79,7 +90,11 @@ class PipelineRunner:
                     result_payload["skip_reason"] = "existing_success_manifest"
                     results.append(result_payload)
                     current_input_manifest = existing_manifest_path
-                    if int((result_payload.get("metrics") or {}).get("new_links_total", 0) or 0) == 0:
+                    if (
+                        int((result_payload.get("metrics") or {}).get("new_links_total", 0) or 0) == 0
+                        and self._lopes_backlog(context) == 0
+                    ):
+                        stop_reason = "no_new_links_after_discovery"
                         break
                     continue
 
@@ -95,7 +110,15 @@ class PipelineRunner:
                 pipeline_status = "failed"
                 blocked_stage = stage_name
                 break
-            if stage_name == "collect_discovery" and int(result.metrics.get("new_links_total", 0) or 0) == 0:
+            if (
+                stage_name == "collect_discovery"
+                and int(result.metrics.get("new_links_total", 0) or 0) == 0
+                and self._lopes_backlog(context) == 0
+            ):
+                stop_reason = "no_new_links_after_discovery"
+                break
+            if stage_name == "collect_listings" and result.status == "success" and not result.artifacts:
+                stop_reason = "no_listing_outputs"
                 break
 
             current_input_manifest = Path(result.output_manifest) if result.output_manifest else None
@@ -104,18 +127,16 @@ class PipelineRunner:
             "context": context.to_dict(),
             "status": pipeline_status,
             "blocked_stage": blocked_stage,
-            "stop_reason": "no_new_links_after_discovery"
-            if pipeline_status == "success"
-            and results
-            and results[-1]["stage_name"] == "collect_discovery"
-            and int(results[-1].get("metrics", {}).get("new_links_total", 0) or 0) == 0
-            else None,
+            "stop_reason": stop_reason,
             "verbose": verbose,
             "force_discovery": force_discovery,
             "results": results,
         }
         write_json(pipeline_manifest_path(context), payload)
         return payload
+
+    def _lopes_backlog(self, context) -> int:
+        return int(queue_metrics(state_db_path(context.output_root)).get("backlog_remaining", 0) or 0)
 
     def _load_reusable_success_manifest(self, manifest_path: Path) -> dict[str, object] | None:
         if not manifest_path.exists():

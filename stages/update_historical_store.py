@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from pipelines.historical_store import HISTORY_COLUMNS, UPSERT_KEY_COLUMNS, update_historical_store
+from scrapers.lopes_state import get_metadata, set_metadata, state_db_path
 from workflow.models import ArtifactRecord, StageResult, ValidationResult
 from workflow.paths import build_scoped_output_dir, build_source_scope_token, normalize_selected_sources
 from workflow.stages import Stage
@@ -44,6 +45,14 @@ class UpdateHistoricalStoreStage(Stage):
 
         processed_dir = build_scoped_output_dir(context.processed_dir, selected_sources)
         output = update_historical_store(snapshot_listings, processed_dir)
+        lopes_db_path = state_db_path(context.output_root)
+        if (
+            lopes_db_path.exists()
+            and "source" in snapshot_listings.columns
+            and bool((snapshot_listings["source"] == "lopes").any())
+            and get_metadata(lopes_db_path, "bootstrap_results_published") == "0"
+        ):
+            set_metadata(lopes_db_path, "bootstrap_results_published", "1")
         listings_df = output["listings"]
         properties_df = output["properties"]
         links_df = output["links"]

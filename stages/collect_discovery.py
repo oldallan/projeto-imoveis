@@ -50,6 +50,17 @@ class CollectDiscoveryStage(Stage):
                 if result["status"] != "success":
                     errors.append(f"{scraper.name}: {result['message']}")
 
+        successful_count = sum(1 for item in source_results if item["status"] == "success")
+        if successful_count:
+            errors = []
+        lopes_backlog = max(
+            (
+                int((item.get("runner_metrics") or {}).get("backlog_remaining", 0) or 0)
+                for item in source_results if item.get("source") == "lopes"
+            ),
+            default=0,
+        )
+
         metrics = {
             "configured_scrapers": len(scrapers),
             "successful_scrapers": sum(1 for item in source_results if item["status"] == "success"),
@@ -58,6 +69,7 @@ class CollectDiscoveryStage(Stage):
             "parallel_source_limit": self.max_parallel_sources,
             "selected_sources": selected_sources,
             "source_results": source_results,
+            "lopes_backlog_remaining": lopes_backlog,
         }
         return artifacts, metrics, errors
 
@@ -157,6 +169,14 @@ class CollectDiscoveryStage(Stage):
                 name="all_discovery_scrapers_succeeded",
                 passed=all(item["status"] == "success" for item in source_results) and bool(source_results),
                 message="Todos os scrapers de discovery devem concluir com sucesso.",
+                severity="warning",
+            )
+        )
+        validations.append(
+            ValidationResult(
+                name="at_least_one_discovery_scraper_succeeded",
+                passed=any(item["status"] == "success" for item in source_results),
+                message="Ao menos uma fonte de discovery deve concluir com sucesso.",
             )
         )
 

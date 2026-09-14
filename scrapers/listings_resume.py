@@ -692,6 +692,12 @@ class BaseListingsSpider(scrapy.Spider):
 
     def handle_parse_error(self, response: Response, exc: Exception):
         scheduled_index = int(response.meta["scheduled_index"])
+        self._mark_terminal_processed(
+            response.meta.get("_resume_record") or response.meta,
+            status="transient_failure",
+            scheduled_index=scheduled_index,
+            url=response.meta.get("listing_url") or response.url,
+        )
         log_warn(
             "listing_collection_item_parse_failed",
             label=self.label,
@@ -733,6 +739,12 @@ class BaseListingsSpider(scrapy.Spider):
 
         if status == 500:
             self.metrics["listing_page_failures"] += 1
+            self._mark_terminal_processed(
+                response.meta.get("_resume_record") or response.meta,
+                status="transient_failure",
+                scheduled_index=scheduled_index,
+                url=response.meta.get("listing_url") or response.url,
+            )
             log_warn(
                 "listing_collection_item_failed",
                 label=self.label,
@@ -744,6 +756,12 @@ class BaseListingsSpider(scrapy.Spider):
 
         if status != 200:
             self.metrics["listing_page_failures"] += 1
+            self._mark_terminal_processed(
+                response.meta.get("_resume_record") or response.meta,
+                status="transient_failure",
+                scheduled_index=scheduled_index,
+                url=response.meta.get("listing_url") or response.url,
+            )
             log_warn(
                 "listing_collection_item_failed",
                 label=self.label,
@@ -772,6 +790,12 @@ class BaseListingsSpider(scrapy.Spider):
             return None
 
         self.metrics["listing_page_failures"] += 1
+        self._mark_terminal_processed(
+            response.meta.get("_resume_record") or response.meta,
+            status="transient_failure",
+            scheduled_index=scheduled_index,
+            url=response.meta.get("listing_url") or response.url,
+        )
         log_warn(
             "listing_collection_item_empty",
             label=self.label,
@@ -788,6 +812,12 @@ class BaseListingsSpider(scrapy.Spider):
         self.metrics["listing_page_failures"] += 1
         status = getattr(getattr(failure.value, "response", None), "status", None)
         count_failure = status != 500
+        self._mark_terminal_processed(
+            request.meta.get("_resume_record") or request.meta,
+            status="transient_failure",
+            scheduled_index=scheduled_index,
+            url=request.meta.get("listing_url") or request.url,
+        )
         log_warn(
             "listing_collection_item_failed",
             label=self.label,

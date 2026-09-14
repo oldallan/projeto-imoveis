@@ -40,6 +40,10 @@ def collect_listings(
     concurrent_requests_per_domain: int = 1,
     download_delay: float = 1.0,
     download_timeout: int = 30,
+    state_db_path: str | None = None,
+    daily_limit: int = 10_000,
+    new_quota: int = 8_000,
+    refresh_quota: int = 2_000,
 ) -> dict[str, object] | None:
     return collect_listings_from_file(
         input_path=input_path,
@@ -57,4 +61,8 @@ def collect_listings(
         concurrent_requests_per_domain=concurrent_requests_per_domain,
         download_delay=download_delay,
         download_timeout=download_timeout,
+        state_db_path=state_db_path,
+        daily_limit=daily_limit,
+        new_quota=new_quota,
+        refresh_quota=refresh_quota,
     )

@@ -81,6 +81,9 @@ def get_scraper_definitions() -> list[ScraperDefinition]:
                 "download_delay": 1.0,
                 "download_timeout": 30,
                 "max_consecutive_failures": 100,
+                "daily_limit": 10_000,
+                "new_quota": 8_000,
+                "refresh_quota": 2_000,
             },
         ),
         ScraperDefinition(

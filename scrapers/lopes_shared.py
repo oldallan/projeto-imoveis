@@ -26,7 +26,15 @@ from scrapers.zip_utils import extract_zip_code, extract_zip_code_from_mapping
 BASE_SITE_URL = "https://www.lopes.com.br"
 SITEMAP_INDEX_URL = "https://www.lopes.com.br/sitemaps/sitemap-index.xml"
 DISCOVERY_FILENAME = "lopes_discovery.csv"
-DISCOVERY_FIELDNAMES = ["business_type", "lastmod", "listing_id", "listing_url"]
+DISCOVERY_FIELDNAMES = [
+    "business_type",
+    "lastmod",
+    "listing_id",
+    "listing_url",
+    "collection_priority",
+    "sitemap_generation_id",
+    "discovered_at",
+]
 LISTING_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Referer": "https://www.lopes.com.br/",

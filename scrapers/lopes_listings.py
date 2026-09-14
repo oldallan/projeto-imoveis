@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import parse_qsl, urlparse
 
+import pandas as pd
 import scrapy
 from scrapy.http import Request, Response
 
@@ -13,6 +14,7 @@ from scrapers.io_utils import load_csv_records
 from scrapers.logging_utils import log_warn
 from scrapers.listings_resume import (
     BaseListingsSpider,
+    TERMINAL_NO_OUTPUT_STATUSES,
     build_listing_resume_key,
     build_incomplete_output_path,
     build_resume_paths,
@@ -20,9 +22,17 @@ from scrapers.listings_resume import (
     cleanup_resume_runtime,
     default_resume_dir,
     load_resume_state,
+    load_jsonl_records,
+    dedupe_listing_records,
     run_batched_scrapy_collection,
     save_resume_state,
     utc_now_iso,
+)
+from scrapers.lopes_state import (
+    claim_daily_batch,
+    finalize_claim,
+    get_metadata,
+    queue_metrics,
 )
 from scrapers.lopes_shared import *  # noqa: F403
 from scrapers.scrapy_runner import run_spider
@@ -208,6 +218,7 @@ def build_scrapy_settings(
 class LopesListingsSpider(BaseListingsSpider):
     name = "lopes_listings"
     allowed_domains = ["lopes.com.br", "www.lopes.com.br"]
+    terminal_not_found_statuses = {404, 410}
 
     def build_request(self, record: Dict[str, Any], *, scheduled_index: int) -> Request | None:
         listing_url = str(record.get("listing_url") or "").strip()
@@ -226,7 +237,19 @@ class LopesListingsSpider(BaseListingsSpider):
         )
 
     def parse_record(self, response: Response) -> dict[str, Any]:
-        return parse_listing_page_html(response.text, fallback_url=str(response.meta["listing_url"]))
+        parsed = parse_listing_page_html(response.text, fallback_url=str(response.meta["listing_url"]))
+        resume_record = response.meta.get("_resume_record") or {}
+        if parsed:
+            parsed.update(
+                {
+                    "queue_listing_url": resume_record.get("listing_url") or response.meta["listing_url"],
+                    "discovered_at": resume_record.get("discovered_at"),
+                    "sitemap_lastmod": resume_record.get("sitemap_lastmod") or resume_record.get("lastmod"),
+                    "sitemap_generation_id": resume_record.get("sitemap_generation_id"),
+                    "collection_priority": resume_record.get("collection_priority"),
+                }
+            )
+        return parsed
 
     @staticmethod
     def _is_lopes_host(hostname: str | None) -> bool:
@@ -345,7 +368,32 @@ def collect_listings_from_file(
     concurrent_requests_per_domain: int = 1,
     download_delay: float = 1.0,
     download_timeout: int = 30,
+    state_db_path: str | None = None,
+    daily_limit: int = 10_000,
+    new_quota: int = 8_000,
+    refresh_quota: int = 2_000,
 ) -> dict[str, Any] | None:
+    if state_db_path:
+        return _collect_persistent_queue(
+            listings_output_path=listings_output_path,
+            listings_parquet_output_path=listings_parquet_output_path,
+            state_db_path=state_db_path,
+            max_consecutive_failures=max_consecutive_failures,
+            label=label,
+            resume_dir=resume_dir,
+            verbose=verbose,
+            retry_times=retry_times,
+            autothrottle_start_delay=autothrottle_start_delay,
+            autothrottle_max_delay=autothrottle_max_delay,
+            autothrottle_target_concurrency=autothrottle_target_concurrency,
+            concurrent_requests=concurrent_requests,
+            concurrent_requests_per_domain=concurrent_requests_per_domain,
+            download_delay=download_delay,
+            download_timeout=download_timeout,
+            daily_limit=daily_limit,
+            new_quota=new_quota,
+            refresh_quota=refresh_quota,
+        )
     base_records = load_csv_records(input_path)
     if not base_records:
         return {
@@ -447,4 +495,137 @@ def collect_listings_from_file(
         "input_rows": len(base_records),
         "output_rows": len(listings_records),
         "resume_state_path": str(resume_paths["state_json"]),
+    }
+
+
+def _collect_persistent_queue(
+    *,
+    listings_output_path: str,
+    listings_parquet_output_path: str,
+    state_db_path: str,
+    max_consecutive_failures: int,
+    label: str,
+    resume_dir: str | None,
+    verbose: bool,
+    retry_times: int,
+    autothrottle_start_delay: float,
+    autothrottle_max_delay: float,
+    autothrottle_target_concurrency: float,
+    concurrent_requests: int,
+    concurrent_requests_per_domain: int,
+    download_delay: float,
+    download_timeout: int,
+    daily_limit: int,
+    new_quota: int,
+    refresh_quota: int,
+) -> dict[str, Any]:
+    run_date = infer_run_date_from_output_path(listings_output_path) or utc_now_iso()[:10]
+    claim_token = f"lopes:{run_date}"
+    claimed_records = claim_daily_batch(
+        state_db_path,
+        claim_token=claim_token,
+        daily_limit=daily_limit,
+        new_quota=new_quota,
+        refresh_quota=refresh_quota,
+    )
+    resolved_resume_dir = (
+        default_resume_dir(label=label, listings_output_path=listings_output_path)
+        if resume_dir is None
+        else Path(resume_dir)
+    ) / "queue"
+    resume_paths = build_resume_paths(resolved_resume_dir)
+    listings_records: list[dict[str, Any]] = []
+    scraper_metrics: dict[str, Any] = {}
+    terminal_urls: set[str] = set()
+    attempted_urls: set[str] = set()
+
+    try:
+        if claimed_records:
+            listings_records, scraper_metrics = run_scrapy_collection(
+                records=claimed_records,
+                label=label,
+                max_consecutive_failures=max_consecutive_failures,
+                listings_output_path=listings_output_path,
+                listings_parquet_output_path=listings_parquet_output_path,
+                resume_dir=str(resolved_resume_dir),
+                verbose=verbose,
+                retry_times=retry_times,
+                autothrottle_start_delay=autothrottle_start_delay,
+                autothrottle_max_delay=autothrottle_max_delay,
+                autothrottle_target_concurrency=autothrottle_target_concurrency,
+                concurrent_requests=concurrent_requests,
+                concurrent_requests_per_domain=concurrent_requests_per_domain,
+                download_delay=download_delay,
+                download_timeout=download_timeout,
+            )
+            claimed_urls = {str(record["listing_url"]) for record in claimed_records}
+            claimed_by_id = {
+                str(record.get("listing_id") or "").strip(): str(record["listing_url"])
+                for record in claimed_records
+                if str(record.get("listing_id") or "").strip()
+            }
+            for record in load_jsonl_records(resume_paths["processed_jsonl"]):
+                ledger_url = str(record.get("listing_url") or "").strip()
+                property_id = str(record.get("property_id") or "").strip()
+                resolved_url: str | None = None
+                if ledger_url in claimed_urls:
+                    resolved_url = ledger_url
+                elif property_id in claimed_by_id:
+                    resolved_url = claimed_by_id[property_id]
+                if resolved_url:
+                    attempted_urls.add(resolved_url)
+                    if str(record.get("status") or "") in TERMINAL_NO_OUTPUT_STATUSES:
+                        terminal_urls.add(resolved_url)
+        successful_urls = {
+            str(record.get("queue_listing_url") or record.get("listing_url") or "").strip()
+            for record in listings_records
+            if str(record.get("queue_listing_url") or record.get("listing_url") or "").strip()
+        }
+        attempted_urls.update(successful_urls)
+        state_metrics = finalize_claim(
+            state_db_path,
+            claim_token=claim_token,
+            successful_urls=successful_urls,
+            terminal_urls=terminal_urls,
+            attempted_urls=attempted_urls,
+            error=str(scraper_metrics.get("stop_reason") or "transient_failure"),
+        ) if claimed_records else queue_metrics(state_db_path)
+    except Exception as exc:
+        finalize_claim(
+            state_db_path,
+            claim_token=claim_token,
+            successful_urls=set(),
+            terminal_urls=set(),
+            attempted_urls=set(),
+            error=str(exc),
+        )
+        raise
+
+    bootstrap_path_text = get_metadata(state_db_path, "bootstrap_results_path")
+    bootstrap_published = get_metadata(state_db_path, "bootstrap_results_published") == "1"
+    bootstrap_records: list[dict[str, Any]] = []
+    if bootstrap_path_text and not bootstrap_published and Path(bootstrap_path_text).exists():
+        bootstrap_frame = pd.read_parquet(bootstrap_path_text)
+        bootstrap_frame = bootstrap_frame.where(pd.notna(bootstrap_frame), None)
+        bootstrap_records = bootstrap_frame.to_dict(orient="records")
+
+    output_records = dedupe_listing_records([*bootstrap_records, *listings_records])
+    if output_records:
+        temp_csv_path = Path(listings_output_path).with_suffix(Path(listings_output_path).suffix + ".tmp")
+        temp_parquet_path = Path(listings_parquet_output_path).with_suffix(Path(listings_parquet_output_path).suffix + ".tmp")
+        save_csv(output_records, filename=str(temp_csv_path))
+        save_parquet(output_records, filename=str(temp_parquet_path))
+        temp_csv_path.replace(listings_output_path)
+        temp_parquet_path.replace(listings_parquet_output_path)
+        cleanup_incomplete_outputs(listings_output_path, listings_parquet_output_path)
+
+    cleanup_resume_runtime(resume_paths["jobdir"], resume_paths["partial_jsonl"], resume_paths["processed_jsonl"])
+    return {
+        "input_rows": len(claimed_records),
+        "output_rows": len(output_records),
+        "no_op": not output_records,
+        "selected_today": len(claimed_records),
+        "bootstrap_rows_included": len(bootstrap_records),
+        "scraper_metrics": scraper_metrics,
+        **state_metrics,
     }

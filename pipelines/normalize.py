@@ -63,6 +63,10 @@ CANONICAL_COLUMNS = [
     "condominium_amenities_json",
     "features_json",
     "pois_json",
+    "discovered_at",
+    "sitemap_lastmod",
+    "sitemap_generation_id",
+    "collection_priority",
     "scraped_at",
 ]
 
@@ -445,6 +449,10 @@ def _normalize_record(record: Mapping[str, Any], source: str, business_type: str
         "condominium_amenities_json": _pick(record, "condominium_amenities_json"),
         "features_json": _pick(record, "features_json"),
         "pois_json": _pick(record, "pois_json"),
+        "discovered_at": _pick(record, "discovered_at"),
+        "sitemap_lastmod": _pick(record, "sitemap_lastmod", "lastmod"),
+        "sitemap_generation_id": _pick(record, "sitemap_generation_id"),
+        "collection_priority": _pick(record, "collection_priority"),
         "scraped_at": datetime.now(timezone.utc).isoformat(),
     }
 

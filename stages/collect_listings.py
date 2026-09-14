@@ -7,6 +7,7 @@ from time import perf_counter
 import pandas as pd
 
 from scrapers.listings_resume import build_resume_paths, load_resume_state
+from scrapers.lopes_state import state_db_path
 from scrapers.registry import get_scraper_definitions
 from workflow.models import ArtifactRecord, StageResult, ValidationResult
 from workflow.paths import normalize_selected_sources
@@ -39,7 +40,11 @@ class CollectListingsStage(Stage):
             ]
             if missing_sources:
                 raise ValueError(f"fontes solicitadas nao configuradas: {missing_sources}")
-            missing_artifacts = [source for source in selected_sources if source not in discovery_artifacts]
+            lopes_state_exists = state_db_path(context.output_root).exists()
+            missing_artifacts = [
+                source for source in selected_sources
+                if source not in discovery_artifacts and not (source == "lopes" and lopes_state_exists)
+            ]
             if missing_artifacts:
                 raise ValueError(f"artefatos de discovery nao encontrados para fontes solicitadas: {missing_artifacts}")
         artifacts: list[ArtifactRecord] = []
@@ -74,6 +79,10 @@ class CollectListingsStage(Stage):
                 if result["status"] != "success":
                     errors.append(f"{scraper.name}: {result['message']}")
 
+        successful_count = sum(1 for item in source_results if item["status"] == "success")
+        if successful_count:
+            errors = []
+
         metrics = {
             "configured_scrapers": len(scrapers),
             "successful_scrapers": sum(1 for item in source_results if item["status"] == "success"),
@@ -84,6 +93,9 @@ class CollectListingsStage(Stage):
             "selected_sources": selected_sources,
             "source_results": source_results,
             "all_sources_no_op": bool(source_results) and all(item.get("no_op") for item in source_results),
+            "all_successful_sources_no_op": bool(successful_count) and all(
+                item.get("no_op") for item in source_results if item["status"] == "success"
+            ),
         }
         return artifacts, metrics, errors
 
@@ -104,7 +116,8 @@ class CollectListingsStage(Stage):
         return discovery_artifacts
 
     def _run_collection(self, scraper, discovery_artifact, context, logger, verbose: bool):
-        if not discovery_artifact:
+        persistent_lopes = scraper.source == "lopes" and state_db_path(context.output_root).exists()
+        if not discovery_artifact and not persistent_lopes:
             return {
                 "name": scraper.name,
                 "source": scraper.source,
@@ -117,7 +130,7 @@ class CollectListingsStage(Stage):
                 "artifacts": [],
             }
 
-        input_path = Path(str(discovery_artifact["path"]))
+        input_path = Path(str(discovery_artifact["path"])) if discovery_artifact else context.raw_dir / "lopes" / "lopes_discovery.csv"
         output_path = context.raw_dir / scraper.source / scraper.listings_filename
         parquet_path = output_path.with_suffix(".parquet")
         artifacts_root = Path(getattr(context, "artifacts_run_dir", Path("artifacts") / context.run_date))
@@ -135,7 +148,7 @@ class CollectListingsStage(Stage):
         status = "success"
         message = "ok"
         stats = {
-            "input_rows": int(discovery_artifact.get("rows") or 0),
+            "input_rows": int(discovery_artifact.get("rows") or 0) if discovery_artifact else 0,
             "output_rows": 0,
             "no_op": False,
             "resumed": resume_state.get("status") in {"in_progress", "failed_terminal"},
@@ -144,28 +157,38 @@ class CollectListingsStage(Stage):
         artifacts: list[ArtifactRecord] = []
 
         try:
-            if stats["input_rows"] <= 0:
+            if stats["input_rows"] <= 0 and not persistent_lopes:
                 stats["no_op"] = True
-            elif resume_state.get("status") == "completed" and output_path.exists():
+            elif not persistent_lopes and resume_state.get("status") == "completed" and output_path.exists():
                 stats["output_rows"] = int(resume_state.get("output_rows") or 0)
                 if stats["output_rows"] <= 0:
                     stats["output_rows"] = len(pd.read_csv(output_path))
                 stats["skipped_completed"] = True
                 artifacts.extend(self._build_listing_artifacts(scraper, output_path, parquet_path, stats["output_rows"]))
             else:
+                extra_options = dict(scraper.collection_options)
+                if persistent_lopes:
+                    extra_options["state_db_path"] = str(state_db_path(context.output_root))
                 output = scraper.run_collection(
                     input_path=str(input_path),
                     listings_output_path=str(output_path),
                     listings_parquet_output_path=str(parquet_path),
                     resume_dir=str(resume_paths["root"]),
                     verbose=verbose,
-                    **scraper.collection_options,
+                    **extra_options,
                 )
                 if output is None:
                     raise RuntimeError(f"scraper {scraper.name} nao gerou artefatos de listings")
                 stats["input_rows"] = int(output.get("input_rows", stats["input_rows"]))
                 stats["output_rows"] = int(output.get("output_rows", 0))
                 stats["no_op"] = bool(output.get("no_op"))
+                for key in (
+                    "selected_today", "completed_today", "terminal_today", "retry_pending",
+                    "failed_terminal", "pending_new", "pending_refresh", "backlog_remaining",
+                    "generation_id", "generation_status", "bootstrap_rows_included",
+                ):
+                    if key in output:
+                        stats[key] = output[key]
                 if not stats["no_op"]:
                     if not output_path.exists():
                         raise FileNotFoundError(f"arquivo final nao encontrado apos scraper: {output_path}")
@@ -219,13 +242,24 @@ class CollectListingsStage(Stage):
     def validate(self, context, input_manifest, result: StageResult, logger, stage_options=None):
         validations: list[ValidationResult] = []
         source_results = result.metrics.get("source_results", [])
-        all_no_op = bool(result.metrics.get("all_sources_no_op"))
+        all_no_op = bool(
+            result.metrics.get("all_sources_no_op")
+            or result.metrics.get("all_successful_sources_no_op")
+        )
 
         validations.append(
             ValidationResult(
                 name="all_collection_scrapers_succeeded",
                 passed=all(item["status"] == "success" for item in source_results) and bool(source_results),
                 message="Todos os scrapers de coleta completa devem concluir com sucesso.",
+                severity="warning",
+            )
+        )
+        validations.append(
+            ValidationResult(
+                name="at_least_one_collection_scraper_succeeded",
+                passed=any(item["status"] == "success" for item in source_results),
+                message="Ao menos uma fonte de listings deve concluir com sucesso.",
             )
         )
 

@@ -69,9 +69,11 @@ def _apply_history_metadata(existing_df: pd.DataFrame, incoming_df: pd.DataFrame
     updated_count = len(existing_keys & incoming_keys)
     inserted_count = len(incoming_keys - existing_keys)
 
-    incoming["first_seen_at"] = incoming["first_seen_at"].fillna(current_timestamp)
+    discovered_at = incoming.get("discovered_at", pd.Series(current_timestamp, index=incoming.index))
+    scraped_at = incoming.get("scraped_at", pd.Series(current_timestamp, index=incoming.index))
+    incoming["first_seen_at"] = incoming["first_seen_at"].fillna(discovered_at).fillna(current_timestamp)
     incoming["created_at"] = incoming["created_at"].fillna(current_timestamp)
-    incoming["last_seen_at"] = current_timestamp
+    incoming["last_seen_at"] = scraped_at.fillna(current_timestamp)
     incoming["updated_at"] = current_timestamp
 
     return incoming.drop(columns=["_upsert_key"]), inserted_count, updated_count

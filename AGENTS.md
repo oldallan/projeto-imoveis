@@ -13,6 +13,8 @@ This repository implements an incremental Python pipeline for real-estate listin
 
 Generated data belongs under `raw/`, `processed/`, `artifacts/`, or `logs/`. These directories are intentionally ignored by Git.
 
+The persistent pipeline data directory is `H:\dados-imoveis` (use it as the CLI `--output-path`).
+
 ## Build, Test, and Development Commands
 
 Use the `projeto_imoveis` Conda environment when available:
